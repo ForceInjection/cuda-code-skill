@@ -4,7 +4,7 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 
 ## Project Overview
 
-This repository converts NVIDIA CUDA documentation (PTX ISA 9.1, CUDA Runtime API 13.1, CUDA Driver API 13.1) from HTML into searchable markdown files. It also packages the output as a Claude Code skill for GPU development assistance.
+This repository converts NVIDIA CUDA documentation (PTX ISA 9.1, CUDA Runtime API 13.1, CUDA Driver API 13.1, CUDA Math API 13.x, cuBLAS 13.2, and NCCL) from HTML into searchable markdown files. It also packages the output as a skill for AI IDEs (like Claude Code, Trae, etc.) for GPU development assistance.
 
 The repo has two functional parts:
 
