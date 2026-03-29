@@ -1,6 +1,6 @@
-# NVIDIA CUDA Documentation + Claude Code Skill
+# NVIDIA CUDA Documentation + AI IDE Skill
 
-NVIDIA's PTX ISA 9.1, CUDA Runtime API 13.1, CUDA Driver API 13.1, CUDA Math API 13.x, cuBLAS 13.2, and NCCL documentation converted to searchable markdown, with a Claude Code skill for GPU development.
+NVIDIA's PTX ISA 9.1, CUDA Runtime API 13.1, CUDA Driver API 13.1, CUDA Math API 13.x, cuBLAS 13.2, and NCCL documentation converted to searchable markdown, with an AI IDE skill (supports Claude Code, Trae, etc.) for GPU development and LLM inference optimization.
 
 ## What's Here
 
