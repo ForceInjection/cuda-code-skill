@@ -902,7 +902,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="Output directory (default: cuda_skill/references/<api>-docs)",
+        help="Output directory (default: skills/cuda-knowledge/references/<api>-docs)",
     )
     parser.add_argument(
         "--skip-download",
@@ -920,12 +920,12 @@ def main() -> None:
     # Set default output directory
     if not args.output_dir:
         default_dirs = {
-            "ptx": "cuda_skill/references/ptx-docs",
-            "runtime": "cuda_skill/references/cuda-runtime-docs",
-            "driver": "cuda_skill/references/cuda-driver-docs",
-            "math": "cuda_skill/references/cuda-math-docs",
-            "cublas": "cuda_skill/references/cublas-docs",
-            "nccl": "cuda_skill/references/nccl-docs",
+            "ptx": "skills/cuda-knowledge/references/ptx-docs",
+            "runtime": "skills/cuda-knowledge/references/cuda-runtime-docs",
+            "driver": "skills/cuda-knowledge/references/cuda-driver-docs",
+            "math": "skills/cuda-knowledge/references/cuda-math-docs",
+            "cublas": "skills/cuda-knowledge/references/cublas-docs",
+            "nccl": "skills/cuda-knowledge/references/nccl-docs",
         }
         args.output_dir = Path(default_dirs[args.api_type])
 
