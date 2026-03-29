@@ -1,5 +1,5 @@
 ---
-name: cuda
+name: cuda-knowledge
 description: "CUDA kernel development, debugging, performance optimization, linear algebra, and multi-GPU communication for Claude Code. Use when writing, debugging, or optimizing CUDA code, GPU kernels, parallel algorithms, or CUDA library calls. Covers cuBLAS/cuBLASLt GEMM operations, CUDA Math API (half, bfloat16, FP8, FP6, FP4), NCCL multi-GPU collectives, non-interactive profiling with nsys/ncu, debugging with cuda-gdb/compute-sanitizer, binary inspection with cuobjdump, and performance analysis workflows. Triggers on CUDA, GPU programming, kernel optimization, nsys, ncu, cuda-gdb, compute-sanitizer, PTX, GPU profiling, parallel performance, cuBLAS, cublasLtMatmul, GEMM, GemmEx, FP8, bfloat16, half precision, __half, __nv_bfloat16, cublasGemmEx, cublasGemmStridedBatchedEx, NCCL, ncclAllReduce, ncclReduceScatter, ncclAllGather, ncclCommInitRank, tensor parallel, pipeline parallel, all-reduce, vLLM CUDA kernels."
 ---
 
