@@ -90,7 +90,11 @@ class DocumentationScraper:
         """Extract main documentation content from page."""
         content = soup.find("div", class_="contents")
         if not content:
-            content = soup.find("div", id="doc-content") or soup.find("body")
+            content = (
+                soup.find("div", id="doc-content")
+                or soup.find(attrs={"role": "main"})
+                or soup.find("body")
+            )
         if not content:
             raise ValueError("Could not find main content")
 
@@ -169,7 +173,33 @@ class DocumentationScraper:
 
 
 class APIScraper(DocumentationScraper):
-    """Scraper for CUDA Runtime and Driver API documentation."""
+    """Scraper for CUDA Runtime, Driver, and Math API documentation."""
+
+    # Per-type config: (base_url, modules_discovery_path, modules_pattern,
+    #                   structs_discovery_path, structs_pattern)
+    _CONFIG: dict[str, tuple[str, str, str, str, str]] = {
+        "runtime": (
+            "https://docs.nvidia.com/cuda/cuda-runtime-api/",
+            "modules.html",
+            r"group__CUDART.*\.html",
+            "annotated.html",
+            r"(struct|union).*\.html",
+        ),
+        "driver": (
+            "https://docs.nvidia.com/cuda/cuda-driver-api/",
+            "modules.html",
+            r"group__CUDA__.*\.html",
+            "annotated.html",
+            r"structCU.*\.html",
+        ),
+        "math": (
+            "https://docs.nvidia.com/cuda/cuda-math-api/",
+            "index.html",
+            r"cuda_math_api/group__CUDA__MATH__.*\.html",
+            "cuda_math_api/structs.html",
+            r"struct.*\.html",
+        ),
+    }
 
     def __init__(
         self,
@@ -178,13 +208,10 @@ class APIScraper(DocumentationScraper):
         skip_download: bool = False,
         force: bool = False,
     ):
-        base_urls = {
-            "runtime": "https://docs.nvidia.com/cuda/cuda-runtime-api/",
-            "driver": "https://docs.nvidia.com/cuda/cuda-driver-api/",
-        }
         self.api_type = api_type
+        base_url = self._CONFIG[api_type][0]
         super().__init__(
-            base_urls[api_type],
+            base_url,
             output_dir,
             skip_download=skip_download,
             force=force,
@@ -213,27 +240,25 @@ class APIScraper(DocumentationScraper):
 
     def _discover_modules(self) -> list[dict[str, str]]:
         """Discover all module pages."""
-        soup = self.fetch_page(urljoin(self.base_url, "modules.html"))
+        _, modules_path, modules_pattern, _, _ = self._CONFIG[self.api_type]
+        page_url = urljoin(self.base_url, modules_path)
+        soup = self.fetch_page(page_url)
         if not soup:
             return []
 
-        pattern = (
-            r"group__CUDA__.*\.html"
-            if self.api_type == "driver"
-            else r"group__CUDART.*\.html"
-        )
         modules = []
         seen = set()
 
-        for link in soup.find_all("a", href=re.compile(pattern)):
+        for link in soup.find_all("a", href=re.compile(modules_pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            # Skip anchored links (e.g. page.html#func) — we want page-level granularity
+            if href and title and "#" not in href and href not in seen:
                 seen.add(href)
                 modules.append(
                     {
-                        "url": urljoin(self.base_url, href),
-                        "filename": href,
+                        "url": urljoin(page_url, href),
+                        "filename": Path(href).name,
                         "title": title,
                     }
                 )
@@ -243,32 +268,30 @@ class APIScraper(DocumentationScraper):
 
     def _discover_structures(self) -> list[dict[str, str]]:
         """Discover all data structure pages."""
+        _, _, _, structs_path, structs_pattern = self._CONFIG[self.api_type]
+        page_url = urljoin(self.base_url, structs_path)
         try:
-            soup = self.fetch_page(urljoin(self.base_url, "annotated.html"))
+            soup = self.fetch_page(page_url)
         except Exception as e:
-            print(f"Warning: Could not fetch annotated.html: {e}")
+            print(f"Warning: Could not fetch {structs_path}: {e}")
             return []
 
         if not soup:
             return []
 
-        pattern = (
-            r"structCU.*\.html"
-            if self.api_type == "driver"
-            else r"(struct|union).*\.html"
-        )
         structures = []
         seen = set()
 
-        for link in soup.find_all("a", href=re.compile(pattern)):
+        for link in soup.find_all("a", href=re.compile(structs_pattern)):
             href = link.get("href")
             title = link.get_text(strip=True)
-            if href and title and href not in seen:
+            # Skip anchored links — we want page-level granularity
+            if href and title and "#" not in href and href not in seen:
                 seen.add(href)
                 structures.append(
                     {
-                        "url": urljoin(self.base_url, href),
-                        "filename": href,
+                        "url": urljoin(page_url, href),
+                        "filename": Path(href).name,
                         "title": title,
                     }
                 )
@@ -534,22 +557,46 @@ class APIScraper(DocumentationScraper):
         print(f"  ✓ Created: {index_path}")
 
 
-class PTXScraper(DocumentationScraper):
-    """Scraper for PTX ISA single-page documentation."""
+class SphinxScraper(DocumentationScraper):
+    """Scraper for Sphinx single-page NVIDIA documentation.
 
-    def __init__(self, output_dir: Path):
-        super().__init__(
-            "https://docs.nvidia.com/cuda/parallel-thread-execution/",
-            output_dir,
-        )
+    Handles any monolithic Sphinx doc page (cuBLAS, CUDA Math API, NVRTC, etc.)
+    by splitting it into per-section markdown files organized into chapter dirs.
+    """
+
+    # Registry of known Sphinx docs: doc_type -> (display_name, page_url)
+    KNOWN_DOCS: dict[str, tuple[str, str]] = {
+        "cublas": (
+            "cuBLAS",
+            "https://docs.nvidia.com/cuda/cublas/index.html",
+        ),
+    }
+
+    def __init__(self, display_name: str, page_url: str, output_dir: Path):
+        self.display_name = display_name
+        self.page_url = page_url
+        # base_url = parent directory of page_url (used for absolute image URLs)
+        base_url = page_url.rsplit("/", 1)[0] + "/"
+        super().__init__(base_url, output_dir)
+
+    @classmethod
+    def from_doc_type(cls, doc_type: str, output_dir: Path) -> "SphinxScraper":
+        """Construct from a registered doc_type key."""
+        if doc_type not in cls.KNOWN_DOCS:
+            raise ValueError(
+                f"Unknown Sphinx doc type '{doc_type}'. "
+                f"Known: {list(cls.KNOWN_DOCS)}"
+            )
+        display_name, page_url = cls.KNOWN_DOCS[doc_type]
+        return cls(display_name, page_url, output_dir)
 
     def run(self) -> None:
-        """Execute PTX scraping workflow."""
+        """Execute Sphinx single-page scraping workflow."""
         print("=" * 70)
-        print("PTX ISA Documentation Scraper")
+        print(f"{self.display_name} Documentation Scraper")
         print("=" * 70)
 
-        soup = self.fetch_page(f"{self.base_url}index.html")
+        soup = self.fetch_page(self.page_url)
         if not soup:
             print("Failed to fetch documentation")
             return
@@ -558,10 +605,15 @@ class PTXScraper(DocumentationScraper):
         sections = self._extract_sections(soup)
         print(f"Found {len(sections)} sections")
 
-        # Organize by chapters
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Organize by top-level (h1) chapters
         current_chapter_dir = self.output_dir
         for section in sections:
-            if "notice" in section["title"].lower() and section["level"] == 0:
+            title_lower = section["title"].lower()
+            if section["level"] == 0 and any(
+                skip in title_lower for skip in ("notice", "acknowledgement")
+            ):
                 continue
 
             if section["level"] == 0:
@@ -577,7 +629,7 @@ class PTXScraper(DocumentationScraper):
         print(f"\n✓ Complete! Documentation saved to: {self.output_dir}")
 
     def _extract_sections(self, soup: BeautifulSoup) -> list[dict]:
-        """Extract sections from single-page documentation."""
+        """Extract all h1-h4 sections from single-page Sphinx documentation."""
         content = None
         for selector in [
             {"role": "main"},
@@ -600,7 +652,7 @@ class PTXScraper(DocumentationScraper):
             if not heading_text:
                 continue
 
-            # Extract section number
+            # Extract optional numeric section prefix (e.g. "2.3.1. Title")
             section_match = re.match(r"^(\d+(?:\.\d+)*)\.\s*(.+)$", heading_text)
             section_num = section_match.group(1) if section_match else ""
             title = section_match.group(2) if section_match else heading_text
@@ -608,20 +660,16 @@ class PTXScraper(DocumentationScraper):
             anchor_id = heading.get("id", "") or (
                 heading.find("a").get("id", "") if heading.find("a") else ""
             )
-            level = int(heading.name[1]) - 1
+            level = int(heading.name[1]) - 1  # h1→0, h2→1, h3→2, h4→3
 
-            # Collect content
+            # Collect sibling elements until a heading of the same or higher level
             content_elements = []
             current = heading.next_sibling
             while current:
-                if isinstance(current, Tag) and current.name in [
-                    "h1",
-                    "h2",
-                    "h3",
-                    "h4",
-                ]:
-                    current_level = int(current.name[1]) - 1
-                    if current_level <= level:
+                if isinstance(current, Tag) and current.name in (
+                    "h1", "h2", "h3", "h4"
+                ):
+                    if int(current.name[1]) - 1 <= level:
                         break
                 if isinstance(current, Tag):
                     content_elements.append(current)
@@ -640,11 +688,11 @@ class PTXScraper(DocumentationScraper):
         return sections
 
     def _save_section(self, section: dict, parent_dir: Path) -> None:
-        """Save section as markdown file."""
+        """Render a section as a markdown file and write it to parent_dir."""
         filename = self.sanitize_filename(section["title"], section["section_num"])
         markdown_parts = []
 
-        # Add heading
+        # Heading
         level_prefix = "#" * (section["level"] + 1)
         title_with_num = (
             f"{section['section_num']}. {section['title']}"
@@ -653,17 +701,17 @@ class PTXScraper(DocumentationScraper):
         )
         markdown_parts.append(f"{level_prefix} {title_with_num}\n")
 
-        # Add content
+        # Body
         for element in section["content"]:
-            for class_name in ["headerlink", "viewcode-link", "navigation", "related"]:
+            for class_name in ("headerlink", "viewcode-link", "navigation", "related"):
                 for unwanted in element.find_all(class_=class_name):
                     unwanted.decompose()
 
             md = self.h2t.handle(str(element))
-            # Fix image URLs
+            # Rewrite relative _images/ paths to absolute URLs
             md = re.sub(
                 r"!\[(.*?)\]\(_images/(.*?)\)",
-                r"![\1](https://docs.nvidia.com/cuda/parallel-thread-execution/_images/\2)",
+                rf"![\1]({self.base_url}_images/\2)",
                 md,
             )
             if md:
@@ -672,10 +720,173 @@ class PTXScraper(DocumentationScraper):
         markdown = "\n\n".join(markdown_parts)
         markdown = re.sub(r"\n{4,}", "\n\n\n", markdown)
 
-        # Write file
         output_file = parent_dir / f"{filename}.md"
         output_file.write_text(markdown, encoding="utf-8")
         print(f"  Saved: {output_file.name}")
+
+
+class SphinxMultiPageScraper(DocumentationScraper):
+    """Scraper for Sphinx multi-page NVIDIA documentation.
+
+    Handles documentation sites with an index page linking to individual
+    content pages (e.g., NCCL User Guide). Preserves URL directory structure
+    in the output (usage/communicators.html → usage/communicators.md).
+    """
+
+    # Registry: doc_type -> (display_name, base_url, index_page)
+    KNOWN_DOCS: dict[str, tuple[str, str, str]] = {
+        "nccl": (
+            "NCCL",
+            "https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/",
+            "index.html",
+        ),
+    }
+
+    # Non-content pages to skip
+    SKIP_PAGES = {"genindex.html", "py-modindex.html", "search.html"}
+
+    def __init__(
+        self,
+        display_name: str,
+        base_url: str,
+        index_page: str,
+        output_dir: Path,
+        force: bool = False,
+    ):
+        self.display_name = display_name
+        self.index_page = index_page
+        super().__init__(base_url, output_dir, force=force)
+
+    @classmethod
+    def from_doc_type(
+        cls, doc_type: str, output_dir: Path, force: bool = False
+    ) -> "SphinxMultiPageScraper":
+        if doc_type not in cls.KNOWN_DOCS:
+            raise ValueError(
+                f"Unknown doc type '{doc_type}'. Known: {list(cls.KNOWN_DOCS)}"
+            )
+        display_name, base_url, index_page = cls.KNOWN_DOCS[doc_type]
+        return cls(display_name, base_url, index_page, output_dir, force)
+
+    def _discover_pages(self) -> list[dict[str, str]]:
+        """Discover all content pages from the index TOC."""
+        index_url = urljoin(self.base_url, self.index_page)
+        soup = self.fetch_page(index_url)
+        if not soup:
+            return []
+
+        pages = []
+        seen: set[str] = set()
+
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+            # Only clean page links — skip anchors, external, non-HTML
+            if (
+                "#" in href
+                or href.startswith(("http://", "https://", "mailto:"))
+                or not href.endswith(".html")
+            ):
+                continue
+            basename = Path(href).name
+            if basename in self.SKIP_PAGES or href in seen:
+                continue
+            seen.add(href)
+            toc_title = link.get_text(strip=True)
+            pages.append(
+                {
+                    "href": href,
+                    "url": urljoin(index_url, href),
+                    "toc_title": toc_title,
+                }
+            )
+
+        return pages
+
+    def run(self) -> None:
+        """Execute Sphinx multi-page scraping workflow."""
+        print("=" * 70)
+        print(f"{self.display_name} Documentation Scraper")
+        print("=" * 70)
+
+        print("\n1. Discovering pages...")
+        pages = self._discover_pages()
+        print(f"  Found {len(pages)} content pages")
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        print("\n2. Scraping pages...")
+        all_pages: list[dict] = []
+        for i, page in enumerate(pages, 1):
+            output_path = self.output_dir / Path(page["href"]).with_suffix(".md")
+
+            if output_path.exists() and not self.force:
+                print(f"  [{i}/{len(pages)}] ✓ Cached: {page['href']}")
+                # Read actual title from saved file
+                first_line = output_path.read_text(encoding="utf-8").split("\n")[0]
+                title = first_line.lstrip("# ").strip() or page["toc_title"]
+                all_pages.append({"href": page["href"], "title": title})
+                continue
+
+            soup = self.fetch_page(page["url"])
+            if not soup:
+                continue
+
+            # Use the page's own H1 as title (most accurate)
+            h1 = soup.find("h1")
+            title = (
+                re.sub(r"^\d+(\.\d+)*\.?\s*", "", h1.get_text(strip=True))
+                if h1
+                else page["toc_title"]
+            )
+
+            markdown = self.convert_to_markdown(soup, page["url"])
+            header = f"# {title}\n\n"
+            header += f"**Source:** {page['url']}\n\n"
+            header += "---\n\n"
+            content = header + markdown
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(content, encoding="utf-8")
+            print(
+                f"  [{i}/{len(pages)}] ✓ {page['href']} ({len(content):,} bytes)"
+            )
+            all_pages.append({"href": page["href"], "title": title})
+
+        print("\n3. Creating index...")
+        self._create_index(all_pages)
+
+        all_files = list(self.output_dir.rglob("*.md"))
+        total_size = sum(f.stat().st_size for f in all_files)
+
+        print("\n" + "=" * 70)
+        print("COMPLETE")
+        print("=" * 70)
+        print(
+            f"Output: {self.output_dir} "
+            f"({len(all_files)} files, {total_size/1024/1024:.1f} MB)"
+        )
+
+    def _create_index(self, pages: list[dict]) -> None:
+        """Create INDEX.md listing all scraped pages."""
+        content = f"# {self.display_name} Documentation Index\n\n"
+        content += f"**Pages:** {len(pages)}\n\n"
+        for page in pages:
+            md_rel = str(Path(page["href"]).with_suffix(".md"))
+            content += f"- [{page['title']}]({md_rel})\n"
+        index_path = self.output_dir / "INDEX.md"
+        index_path.write_text(content, encoding="utf-8")
+        print(f"  ✓ Created: {index_path}")
+
+
+class PTXScraper(SphinxScraper):
+    """Scraper for PTX ISA single-page documentation."""
+
+    def __init__(self, output_dir: Path):
+        super().__init__(
+            "PTX ISA",
+            "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html",
+            output_dir,
+        )
 
 
 def main() -> None:
@@ -685,7 +896,7 @@ def main() -> None:
     )
     parser.add_argument(
         "api_type",
-        choices=["ptx", "runtime", "driver"],
+        choices=["ptx", "runtime", "driver", "math", "cublas", "nccl"],
         help="API type to scrape",
     )
     parser.add_argument(
@@ -708,13 +919,26 @@ def main() -> None:
 
     # Set default output directory
     if not args.output_dir:
-        api_name = "ptx" if args.api_type == "ptx" else f"cuda-{args.api_type}"
-        args.output_dir = Path(f"cuda_skill/references/{api_name}-docs")
+        default_dirs = {
+            "ptx": "cuda_skill/references/ptx-docs",
+            "runtime": "cuda_skill/references/cuda-runtime-docs",
+            "driver": "cuda_skill/references/cuda-driver-docs",
+            "math": "cuda_skill/references/cuda-math-docs",
+            "cublas": "cuda_skill/references/cublas-docs",
+            "nccl": "cuda_skill/references/nccl-docs",
+        }
+        args.output_dir = Path(default_dirs[args.api_type])
 
     # Create appropriate scraper
-    scraper: PTXScraper | APIScraper
+    scraper: PTXScraper | APIScraper | SphinxScraper | SphinxMultiPageScraper
     if args.api_type == "ptx":
         scraper = PTXScraper(args.output_dir)
+    elif args.api_type == "cublas":
+        scraper = SphinxScraper.from_doc_type("cublas", args.output_dir)
+    elif args.api_type in SphinxMultiPageScraper.KNOWN_DOCS:
+        scraper = SphinxMultiPageScraper.from_doc_type(
+            args.api_type, args.output_dir, args.force
+        )
     else:
         scraper = APIScraper(
             args.api_type, args.output_dir, args.skip_download, args.force
