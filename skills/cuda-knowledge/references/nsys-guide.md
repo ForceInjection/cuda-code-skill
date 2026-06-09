@@ -72,20 +72,24 @@ nsys stats report.nsys-rep --report cuda_gpu_kern_sum --report cuda_api_sum
 ### Key Reports Explained
 
 **cuda_gpu_kern_sum** — Kernel execution summary
+
 - Time: Total GPU time for each kernel
 - Instances: Number of launches
 - Avg/Min/Max: Per-instance timing
 - Look for: Which kernels dominate runtime?
 
 **cuda_api_sum** — Host-side CUDA API calls
+
 - Shows: cudaMalloc, cudaMemcpy, cudaLaunchKernel, etc.
 - Look for: Excessive sync calls, allocation overhead
 
 **cuda_gpu_mem_time_sum** — Memory transfer timing
+
 - HtoD, DtoH, DtoD operations
 - Look for: Transfer bottlenecks, unnecessary copies
 
 **nvtx_sum** — Custom annotation summary
+
 - Your named regions aggregated
 - Look for: Which phases dominate?
 
@@ -119,12 +123,14 @@ nsys profile --capture-range=cudaProfilerApi ./program
 ### Pattern: Finding Gaps
 
 Low GPU utilization often shows as gaps in the timeline. Causes:
+
 1. CPU computation between kernel launches
 2. Synchronization barriers (cudaDeviceSynchronize)
 3. Memory allocation during runtime
 4. Small kernels with high launch overhead
 
 Investigation:
+
 ```bash
 nsys profile --trace=cuda,osrt -o report ./program
 nsys stats report.nsys-rep --report cuda_api_sum
@@ -140,6 +146,7 @@ nsys stats report.nsys-rep --report cuda_gpu_mem_size_sum
 ```
 
 Questions to answer:
+
 - What % of time is memory transfer vs compute?
 - Are transfers overlapped with compute?
 - Can transfers be batched or eliminated?
@@ -153,6 +160,7 @@ nsys stats report.nsys-rep --report cuda_gpu_kern_sum
 ```
 
 Signs of trouble:
+
 - Many kernels with <10μs execution time
 - Large gap between kernel launches
 - Solution: Kernel fusion, batching
@@ -160,6 +168,7 @@ Signs of trouble:
 ### Pattern: NVTX-Guided Analysis
 
 Add NVTX markers to code, then:
+
 ```bash
 nsys profile --trace=cuda,nvtx -o report ./program
 nsys stats report.nsys-rep --report nvtx_sum
@@ -167,12 +176,72 @@ nsys stats report.nsys-rep --report nvtx_sum
 
 This shows aggregate time per named region across all iterations.
 
+## Quick Analysis Recipes
+
+These are pipeline-friendly, one-shot commands for common profiling tasks. They combine profile + report extraction in a single workflow.
+
+### Kernel Time Dominance (Which kernel to optimize first?)
+
+```bash
+nsys profile -o /tmp/nsys_bench --force-overwrite true ./bench_128k 16096 32 0
+nsys stats --report cuda_gpu_kern_sum /tmp/nsys_bench.nsys-rep
+```
+
+**Output example**:
+
+```text
+Time (%)  Total Time (ns)  Instances    Avg (ns)       Name
+   100.0    1,500,732,899          5  300,146,579.8   gio_issue_io_kernel_warp_all
+```
+
+Look for: The kernel(s) consuming the largest % of total GPU time — these are your optimization targets.
+
+### Kernel Launch Overhead (Many small kernels?)
+
+```bash
+nsys profile --trace=cuda -o /tmp/nsys_launch --force-overwrite true ./program
+nsys stats --report cuda_gpu_kern_sum /tmp/nsys_launch.nsys-rep
+```
+
+Signs of trouble:
+
+- Average kernel duration < 10 μs → launch overhead dominates
+- Large gap between kernel instances in timeline → verify with `nsys stats --report cuda_api_sum`
+
+### Memory Transfer Bottleneck
+
+```bash
+nsys profile --trace=cuda -o /tmp/nsys_mem --force-overwrite true ./program
+nsys stats --report cuda_gpu_mem_time_sum /tmp/nsys_mem.nsys-rep
+nsys stats --report cuda_gpu_mem_size_sum /tmp/nsys_mem.nsys-rep
+```
+
+Look for: HtoD/DtoH transfers interleaved with kernels (not overlapped), or large transfer volumes that could be batched.
+
+### CPU/GPU Overlap Check (Is the GPU idle waiting?)
+
+```bash
+nsys profile --trace=cuda,osrt -o /tmp/nsys_overlap --force-overwrite true ./program
+# Open in GUI for timeline view:
+nsys-ui /tmp/nsys_overlap.nsys-rep
+```
+
+Key question: Are there gaps between consecutive kernel launches? If yes, CPU-side work or synchronization is holding up the GPU.
+
+### Single-Command Quick Look (No separate stats step)
+
+```bash
+nsys profile --stats=true --trace=cuda -o /tmp/nsys_quick --force-overwrite true ./program
+```
+
+The `--stats=true` flag prints a summary directly to stdout after profiling completes — no need for a separate `nsys stats` invocation.
+
 ## Common Options
 
 ```bash
 # Output naming
 -o name              # Base name for output files
--f true              # Force overwrite existing
+-f true              # Force overwrite existing (same as --force-overwrite true)
 
 # Sampling
 --sample=cpu         # CPU sampling (for CPU profiling)
@@ -188,15 +257,18 @@ This shows aggregate time per named region across all iterations.
 ## Troubleshooting
 
 **"No CUDA data collected"**
+
 - Ensure program actually uses CUDA
 - Check `--trace=cuda` is specified
 - Verify CUDA toolkit is properly installed
 
 **Report too large**
+
 - Use `--duration` to limit capture time
 - Use `--trace` to capture only needed data
 - Disable CPU sampling with `--sample=none`
 
 **Missing kernel names**
+
 - Compile with `-lineinfo` for source correlation
 - Kernel names come from CUDA runtime

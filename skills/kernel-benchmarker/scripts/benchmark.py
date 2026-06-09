@@ -32,12 +32,16 @@ ref.py format
 """
 
 import argparse
+import csv
 import ctypes
 import importlib.util
+import io
 import os
 import re
 import subprocess
 import sys
+import threading
+import time
 
 import torch
 
@@ -51,6 +55,7 @@ SUPPORTED_TYPES = {
     "unsigned char*":  ("unsigned char*",  ctypes.c_void_p),
     "unsigned short*": ("unsigned short*", ctypes.c_void_p),
     "unsigned int*":   ("unsigned int*",   ctypes.c_void_p),
+    "unsigned long long*": ("unsigned long long*", ctypes.c_void_p),
     "char*":           ("char*",           ctypes.c_void_p),
     "short*":          ("short*",          ctypes.c_void_p),
     "long*":           ("long*",           ctypes.c_void_p),
@@ -77,7 +82,134 @@ DTYPE_MAP = {
     "unsigned int*":   getattr(torch, "uint32", torch.int32),
 }
 
+# Pointer types that are NOT torch tensors — allocated as pinned host memory.
+# Used for profiling output buffers (e.g., clock64 phase timing arrays).
+RAW_POINTER_TYPES = {"unsigned long long*"}
+
 INT_TYPES = {"int", "long", "size_t", "unsigned int"}
+
+
+# ---------------------------------------------------------------------------
+# GPU hardware state monitor (background nvidia-smi sampler)
+# ---------------------------------------------------------------------------
+
+class GPUMonitor:
+    """Background nvidia-smi sampler that captures GPU state during benchmarks.
+
+    Usage:
+        mon = GPUMonitor(gpu_id=0)
+        mon.start()
+        # ... run benchmark ...
+        csv_data = mon.stop()
+        for w in GPUMonitor.check_issues(csv_data):
+            print(f"[gpu-monitor] WARNING: {w}")
+    """
+
+    QUERY = (
+        "timestamp,clocks.gr,clocks.mem,pstate,power.draw,"
+        "pcie.link.gen.current,pcie.link.width.current,temperature.gpu,"
+        "utilization.gpu,utilization.memory"
+    )
+
+    def __init__(self, gpu_id: int = 0, interval: int = 1):
+        self.gpu_id = gpu_id
+        self.interval = interval
+        self._process = None
+
+    def start(self):
+        """Launch background nvidia-smi sampling."""
+        cmd = [
+            "nvidia-smi", "-i", str(self.gpu_id),
+            "--query-gpu=" + self.QUERY,
+            "--format=csv", "-l", str(self.interval),
+        ]
+        try:
+            self._process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            )
+        except FileNotFoundError:
+            print("[gpu-monitor] nvidia-smi not found — skipping hardware monitoring",
+                  file=sys.stderr)
+
+    def stop(self) -> str:
+        """Stop sampling and return collected CSV text."""
+        if not self._process:
+            return ""
+        try:
+            self._process.terminate()
+            stdout, _ = self._process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            stdout, _ = self._process.communicate()
+        self._process = None
+        return stdout or ""
+
+    @staticmethod
+    def check_issues(csv_text: str) -> list:
+        """Parse nvidia-smi CSV output and return a list of human-readable
+        warning strings for any detected anomalies (throttling, PCIe downgrade,
+        thermal issues, etc.).  Returns empty list if all clear."""
+        if not csv_text.strip():
+            return ["nvidia-smi produced no output — unable to verify GPU state"]
+
+        try:
+            reader = csv.DictReader(io.StringIO(csv_text))
+            rows = [r for r in reader]
+        except Exception:
+            return ["Could not parse nvidia-smi CSV output"]
+
+        if not rows:
+            return ["nvidia-smi produced no data rows"]
+
+        warnings = []
+        seen = {}
+
+        for r in rows:
+            # nvidia-smi CSV pads column names with spaces; try both forms
+            def _val(*keys):
+                for k in keys:
+                    v = r.get(k, "").strip()
+                    if v:
+                        return v
+                return ""
+
+            # --- pstate ---
+            ps = _val("pstate", " pstate")
+            if ps and ps not in ("P0", "") and "pstate" not in seen:
+                seen["pstate"] = ps
+                warnings.append(
+                    f"GPU pstate = {ps} (expected P0) — clock may be throttled"
+                )
+
+            # --- PCIe link generation ---
+            gen = _val("pcie.link.gen.current", " pcie.link.gen.current")
+            if gen and gen not in ("4", "5", "") and "pcie_gen" not in seen:
+                seen["pcie_gen"] = gen
+                warnings.append(
+                    f"PCIe link gen = {gen} (expected 4 or 5) — possible downgrade"
+                )
+
+            # --- PCIe link width ---
+            width = _val("pcie.link.width.current", " pcie.link.width.current")
+            if width and width not in ("16", "") and "pcie_width" not in seen:
+                seen["pcie_width"] = width
+                warnings.append(
+                    f"PCIe link width = x{width} (expected x16) — possible lane failure"
+                )
+
+            # --- thermal ---
+            temp_str = _val("temperature.gpu", " temperature.gpu")
+            try:
+                temp = float(temp_str)
+                if temp > 85:
+                    warnings.append(
+                        f"GPU temperature = {temp}°C — thermal throttling risk"
+                    )
+            except (ValueError, TypeError):
+                pass
+
+        return warnings
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,7 +224,10 @@ def parse_solve_signature(cu_file: str):
     content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
     content = re.sub(r'//[^\n]*', '', content)
 
-    pattern = r'extern\s+"C"\s+(?:__global__\s+)?void\s+solve\s*\(([\s\S]*?)\)\s*\{'
+    # The capture group [^#]*? prevents matching across #ifdef/#else/#endif
+    # boundaries.  When no preprocessor guards are present this is equivalent
+    # to [\s\S]*?.
+    pattern = r'extern\s+"C"\s+(?:__global__\s+)?void\s+solve\s*\(([^#]*?)\)[\s\S]*?\{'
     match = re.search(pattern, content)
     if not match:
         raise ValueError(
@@ -179,14 +314,19 @@ def _ensure_global(cu_file: str) -> str:
 # Compile .cu → load with torch
 # ---------------------------------------------------------------------------
 
-def _compile_and_load(cu_file: str, arch: str, force_recompile: bool = False):
+def _compile_and_load(cu_file: str, arch: str, force_recompile: bool = False,
+                      extra_nvcc_flags: list = None):
     """Compile .cu → .ptx, load with PyTorch, return kernel launcher.
 
     Caches the PTX file: if the .ptx exists and is newer than the .cu source,
     skips recompilation (unless force_recompile=True).  This avoids spawning
     nvcc subprocesses, which is essential for NCU profiling since NCU
     disconnects when child processes exit.
+
+    extra_nvcc_flags: optional list of additional flags passed to nvcc
+        (e.g. ['-DKERNEL_PROFILE']).
     """
+    extra_nvcc_flags = extra_nvcc_flags or []
     ptx_file = os.path.splitext(cu_file)[0] + ".ptx"
 
     need_compile = force_recompile or not os.path.exists(ptx_file)
@@ -199,7 +339,8 @@ def _compile_and_load(cu_file: str, arch: str, force_recompile: bool = False):
         clean_file = _preprocess_cu(cu_file)
         global_file = _ensure_global(clean_file)
 
-        cmd = ["nvcc", "-ptx", f"-arch={arch}", "-O3", "-o", ptx_file, global_file]
+        cmd = ["nvcc", "-ptx", f"-arch={arch}", "-O3"] + extra_nvcc_flags + \
+              ["-o", ptx_file, global_file]
         print(f"[compile] {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -263,33 +404,39 @@ def _compile_and_load(cu_file: str, arch: str, force_recompile: bool = False):
 
 
 def _launch_kernel(cuda, kernel, params: list, dim_values: dict,
-                   kernel_tensors: dict):
-    """Launch the kernel via CUDA Driver API with the given tensors."""
+                   kernel_tensors: dict, raw_pointers: dict = None):
+    """Launch the kernel via CUDA Driver API with the given tensors.
+
+    raw_pointers: dict mapping param name → torch.Tensor (pinned CPU memory)
+        for RAW_POINTER_TYPES parameters. Passed in parameter order.
+    """
+    raw_pointers = raw_pointers or {}
     CUDA_SUCCESS = 0
 
-    ptr_params = [(t, n, c) for t, n, c in params if t in DTYPE_MAP]
-    int_params = [(t, n) for t, n, c in params if t in INT_TYPES]
-
-    # Build kernel arguments
+    # Build kernel arguments in function-signature order
     args = []
-    for ptype, pname, is_const in ptr_params:
-        args.append(ctypes.c_void_p(kernel_tensors[pname].data_ptr()))
-    for itype, iname in int_params:
-        val = dim_values[iname]
-        if itype in ("int", "unsigned int"):
-            args.append(ctypes.c_int(val))
-        elif itype in ("long", "size_t"):
-            args.append(ctypes.c_long(val))
-        else:
-            args.append(ctypes.c_int(val))
+    for ptype, pname, is_const in params:
+        if ptype in DTYPE_MAP:
+            args.append(ctypes.c_void_p(kernel_tensors[pname].data_ptr()))
+        elif ptype in RAW_POINTER_TYPES:
+            args.append(ctypes.c_void_p(raw_pointers[pname].data_ptr()))
+        elif ptype in INT_TYPES:
+            val = dim_values[pname]
+            if ptype in ("int", "unsigned int"):
+                args.append(ctypes.c_int(val))
+            elif ptype in ("long", "size_t"):
+                args.append(ctypes.c_long(val))
+            else:
+                args.append(ctypes.c_int(val))
 
     args_array = (ctypes.c_void_p * len(args))(*[ctypes.cast(ctypes.pointer(a), ctypes.c_void_p) for a in args])
 
     # Determine grid/block dims from the total element count
     total = 256  # default
-    for itype, iname in int_params:
-        total = dim_values[iname]
-        break
+    for ptype, pname, _ in params:
+        if ptype in INT_TYPES:
+            total = dim_values[pname]
+            break
 
     threads = 256
     blocks = (total + threads - 1) // threads
@@ -454,12 +601,21 @@ def _validate_outputs(kernel_tensors, ref_tensors, output_params, atol, rtol):
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def _setup(cu_file, dim_values, ptr_size_override, arch, seed=None, force_recompile=False):
+def _setup(cu_file, dim_values, ptr_size_override, arch, seed=None,
+           force_recompile=False, extra_nvcc_flags=None,
+           profile_phases=False):
     params = parse_solve_signature(cu_file)
+    # When not profiling, strip raw-pointer params (they only exist under
+    # #ifdef KERNEL_PROFILE guards).  When profiling, keep them.
+    if not profile_phases:
+        params = [(t, n, c) for t, n, c in params if t not in RAW_POINTER_TYPES]
     sig_str = ", ".join(f"{'const ' if c else ''}{t} {n}" for t, n, c in params)
     print(f"[signature] solve({sig_str})\n")
 
-    cuda, module, kernel, ptx_file = _compile_and_load(cu_file, arch, force_recompile=force_recompile)
+    cuda, module, kernel, ptx_file = _compile_and_load(
+        cu_file, arch, force_recompile=force_recompile,
+        extra_nvcc_flags=extra_nvcc_flags,
+    )
 
     for ptype, pname, _ in params:
         if ptype in INT_TYPES and pname not in dim_values:
@@ -475,7 +631,17 @@ def _setup(cu_file, dim_values, ptr_size_override, arch, seed=None, force_recomp
         torch.manual_seed(seed)
 
     kernel_tensors: dict = {}
+    raw_pointers: dict = {}        # pinned host memory for profiling buffers
     output_params = []
+
+    # Pre-compute number of CUDA blocks for profiling buffer allocation.
+    # Uses the same heuristic as _launch_kernel: first INT param / 256.
+    _total = 256
+    for ptype, pname, _ in params:
+        if ptype in INT_TYPES:
+            _total = dim_values[pname]
+            break
+    _num_blocks = (_total + 255) // 256
 
     print("[buffers]")
     for ptype, pname, is_const in params:
@@ -494,6 +660,19 @@ def _setup(cu_file, dim_values, ptr_size_override, arch, seed=None, force_recomp
                 f"  {pname:>10s} : {ptype:<16s} [{role:>6s}] "
                 f"{ptr_elems} elems  ({ptr_elems * eb / 1024 / 1024:.1f} MB)"
             )
+        elif ptype in RAW_POINTER_TYPES:
+            # Profiling output buffer — allocate pinned host memory.
+            # One slot per block × 4 phases (load, compute, store, total).
+            num_entries = _num_blocks * 4
+            t = torch.zeros(num_entries, dtype=torch.int64, device="cpu")
+            t = t.pin_memory()
+            raw_pointers[pname] = t
+            kb = t.element_size() * t.numel() / 1024
+            print(
+                f"  {pname:>10s} : {ptype:<16s} [output] "
+                f"{t.numel()} elems ({_num_blocks} blocks × 4 phases, "
+                f"{kb:.1f} KB, pinned host)"
+            )
         elif ptype in SUPPORTED_TYPES:
             val = dim_values[pname]
             print(f"  {pname:>10s} : {ptype:<16s} = {val}")
@@ -501,13 +680,108 @@ def _setup(cu_file, dim_values, ptr_size_override, arch, seed=None, force_recomp
     total_ptr_bytes = sum(t.nelement() * t.element_size()
                           for t in kernel_tensors.values())
 
-    return (cuda, kernel, params, kernel_tensors, output_params,
+    return (cuda, kernel, params, kernel_tensors, raw_pointers, output_params,
             ptr_elems, total_ptr_bytes)
 
 
+def _print_phase_timing(raw_pointers: dict, params: list, dim_values: dict):
+    """Print per-block phase timing breakdown from clock64 profiling output.
+
+    Expects raw_pointers to contain an `unsigned long long*` parameter whose
+    pinned tensor holds per-block [load, compute, store, total] cycle counts.
+    """
+    for ptype, pname, _ in params:
+        if ptype not in RAW_POINTER_TYPES:
+            continue
+        if pname not in raw_pointers:
+            continue
+        data = raw_pointers[pname].numpy()
+        allocated_blocks = len(data) // 4
+        if allocated_blocks == 0:
+            print(f"\n[phase-timing] {pname}: no data (0 blocks)")
+            continue
+
+        # Auto-detect active blocks: find the last block with non-zero total.
+        n_blocks = allocated_blocks
+        for b in range(allocated_blocks - 1, -1, -1):
+            if data[b * 4 + 3] != 0:
+                n_blocks = b + 1
+                break
+        if n_blocks == 0:
+            print(f"\n[phase-timing] {pname}: all blocks have zero total cycles")
+            continue
+
+        cyc_per_ns = 1.98  # GPU-dependent (Hopper ~1.98, Ampere ~1.41 GHz)
+        print(f"\n[phase-timing] {pname}  ({n_blocks} active blocks, "
+              f"{allocated_blocks} allocated, clock64 cycles)")
+        print("-" * 72)
+        print(f"{'Block':>6s}  {'load':>12s}  {'compute':>12s}  "
+              f"{'store':>12s}  {'total':>12s}")
+        print("-" * 72)
+
+        load_sum = comp_sum = store_sum = total_sum = 0
+        for b in range(min(n_blocks, 32)):  # show first 32 blocks
+            lc = int(data[b * 4 + 0])
+            cc = int(data[b * 4 + 1])
+            sc = int(data[b * 4 + 2])
+            tc = int(data[b * 4 + 3])
+            load_sum += lc; comp_sum += cc; store_sum += sc; total_sum += tc
+            print(f"{b:>6d}  {lc:>12,d}  {cc:>12,d}  {sc:>12,d}  {tc:>12,d}")
+
+        if n_blocks > 32:
+            # accumulate remaining in summary
+            for b in range(32, n_blocks):
+                load_sum += int(data[b * 4 + 0])
+                comp_sum += int(data[b * 4 + 1])
+                store_sum += int(data[b * 4 + 2])
+                total_sum += int(data[b * 4 + 3])
+            print(f"  ... ({n_blocks - 32} more blocks omitted)")
+
+        print("-" * 72)
+        def _us(cyc):
+            return cyc / (cyc_per_ns * 1000.0)
+        avg_load = load_sum / n_blocks
+        avg_comp = comp_sum / n_blocks
+        avg_store = store_sum / n_blocks
+        avg_total = total_sum / n_blocks
+        print(f"{'avg':>6s}  {avg_load:>12.1f}  {avg_comp:>12.1f}  "
+              f"{avg_store:>12.1f}  {avg_total:>12.1f}")
+        print(f"{'avg(us)':>6s}  {_us(avg_load):>12.2f}  "
+              f"{_us(avg_comp):>12.2f}  {_us(avg_store):>12.2f}  "
+              f"{_us(avg_total):>12.2f}")
+        pct_load = load_sum / max(total_sum, 1) * 100
+        pct_comp = comp_sum / max(total_sum, 1) * 100
+        pct_store = store_sum / max(total_sum, 1) * 100
+        print(f"{'%':>6s}  {pct_load:>11.1f}%  {pct_comp:>11.1f}%  "
+              f"{pct_store:>11.1f}%")
+        print("-" * 72)
+        if pct_load > 60:
+            print("  → Load-dominated — consider DRAM/L1 bandwidth optimizations")
+        elif pct_comp > 60:
+            print("  → Compute-dominated — consider ILP / Tensor Core optimizations")
+        elif pct_store > 40:
+            print("  → Store-heavy — check for uncoalesced writes")
+        else:
+            print("  → Balanced pipeline")
+
+
 def run(cu_file, ref_file, dim_values, warmup, repeat,
-        ptr_size_override, arch, atol, rtol, seed, force_recompile=False):
+        ptr_size_override, arch, atol, rtol, seed,
+        force_recompile=False, monitor=False, profile_phases=False):
     has_ref = bool(ref_file)
+
+    # --- profile_phases → compile with -DKERNEL_PROFILE -----------------------
+    extra_nvcc_flags = []
+    if profile_phases:
+        extra_nvcc_flags.append("-DKERNEL_PROFILE")
+        print("[profile-phases] compiling with -DKERNEL_PROFILE")
+
+    # --- GPU hardware monitor -------------------------------------------------
+    gpu_mon = None
+    if monitor:
+        gpu_mon = GPUMonitor(gpu_id=torch.cuda.current_device())
+        gpu_mon.start()
+        print("[gpu-monitor] started background nvidia-smi sampling")
 
     ref_fn = None
     ref_kwargs = None
@@ -522,13 +796,18 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
         print(f"[reference] {ref_file}  (atol={_atol}, rtol={_rtol})\n")
 
     # -- compile + allocate ---------------------------------------------------
-    (cuda, kernel, params, kernel_tensors, output_params,
+    (cuda, kernel, params, kernel_tensors, raw_pointers, output_params,
      ptr_elems, total_ptr_bytes) = _setup(
         cu_file, dim_values, ptr_size_override, arch,
-        seed=seed if has_ref else None, force_recompile=force_recompile
+        seed=seed if has_ref else None, force_recompile=force_recompile,
+        extra_nvcc_flags=extra_nvcc_flags,
+        profile_phases=profile_phases,
     )
 
-    if not output_params and has_ref:
+    # Only tensor output params count for validation; raw pointers are
+    # profiling buffers, not validation targets.
+    tensor_output_params = [(n, t) for n, t in output_params if t not in RAW_POINTER_TYPES]
+    if not tensor_output_params and has_ref:
         print("\n[warn] No output tensors detected (all pointer params are const). "
               "Nothing to validate.", file=sys.stderr)
 
@@ -546,7 +825,8 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
                 ref_kwargs[pname] = dim_values[pname]
 
         print("\n[kernel]    running ... ", end="", flush=True)
-        _launch_kernel(cuda, kernel, params, dim_values, kernel_tensors)
+        _launch_kernel(cuda, kernel, params, dim_values,
+                       kernel_tensors, raw_pointers)
         torch.cuda.synchronize()
         print("done")
 
@@ -556,7 +836,7 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
         print("done")
 
         validation_passed = _validate_outputs(
-            kernel_tensors, ref_tensors, output_params, _atol, _rtol
+            kernel_tensors, ref_tensors, tensor_output_params, _atol, _rtol
         )
 
         print("=" * 60)
@@ -585,7 +865,7 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
         print(f"[bench]  reference  {repeat} iterations ... done")
 
     # -------------------------------------------------------------------------
-    # Step 3: benchmark kernel
+    # Step 3: benchmark kernel (with optional phase profiling on last iter)
     # -------------------------------------------------------------------------
     if not has_ref:
         PREVIEW = 8
@@ -598,7 +878,8 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
             tag = "IN " if role == "input" else "OUT"
             print(f"  {tag} {name:>6s} = {_fmt_vals(t[:PREVIEW].cpu().tolist())}")
 
-        _launch_kernel(cuda, kernel, params, dim_values, kernel_tensors)
+        _launch_kernel(cuda, kernel, params, dim_values,
+                       kernel_tensors, raw_pointers)
         torch.cuda.synchronize()
 
         print(f"\n[preview] first {PREVIEW} elements after 1 kernel call:")
@@ -608,7 +889,8 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
 
     print(f"\n[warmup] kernel  {warmup} iterations ...")
     for _ in range(warmup):
-        _launch_kernel(cuda, kernel, params, dim_values, kernel_tensors)
+        _launch_kernel(cuda, kernel, params, dim_values,
+                       kernel_tensors, raw_pointers)
     torch.cuda.synchronize()
 
     start_event = torch.cuda.Event(enable_timing=True)
@@ -616,7 +898,8 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
 
     start_event.record()
     for _ in range(repeat):
-        _launch_kernel(cuda, kernel, params, dim_values, kernel_tensors)
+        _launch_kernel(cuda, kernel, params, dim_values,
+                       kernel_tensors, raw_pointers)
     end_event.record()
     torch.cuda.synchronize()
 
@@ -625,7 +908,27 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
     print(f"[bench]  kernel  {repeat} iterations ... done")
 
     # -------------------------------------------------------------------------
-    # Step 4: print summary
+    # Step 4: print phase timing (if profiling enabled)
+    # -------------------------------------------------------------------------
+    if profile_phases and raw_pointers:
+        _print_phase_timing(raw_pointers, params, dim_values)
+
+    # -------------------------------------------------------------------------
+    # Step 5: stop GPU monitor and report
+    # -------------------------------------------------------------------------
+    if gpu_mon:
+        csv_data = gpu_mon.stop()
+        print("[gpu-monitor] stopped")
+        warnings = GPUMonitor.check_issues(csv_data)
+        if warnings:
+            print("\n[gpu-monitor] ⚠️  GPU STATE WARNINGS:")
+            for w in warnings:
+                print(f"  • {w}")
+        else:
+            print("[gpu-monitor] ✓ GPU state normal — no throttling or degradation")
+
+    # -------------------------------------------------------------------------
+    # Step 6: print summary
     # -------------------------------------------------------------------------
     avg_k, med_k, mn_k, mx_k = _stats(times_kernel)
 
@@ -669,6 +972,14 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--force-recompile", action="store_true",
                         help="Force PTX recompilation even if cached")
+    parser.add_argument("--monitor", action="store_true",
+                        help="Run nvidia-smi in background during benchmark "
+                             "and report GPU state anomalies")
+    parser.add_argument("--profile-phases", action="store_true",
+                        help="Compile with -DKERNEL_PROFILE and print per-phase "
+                             "clock64 timing after benchmark.  Requires the .cu "
+                             "kernel to have #ifdef KERNEL_PROFILE guards with "
+                             "an `unsigned long long*` output parameter.")
 
     args, unknown = parser.parse_known_args()
 
@@ -695,6 +1006,8 @@ def main():
         rtol              = args.rtol,
         seed              = args.seed,
         force_recompile   = args.force_recompile,
+        monitor           = args.monitor,
+        profile_phases    = args.profile_phases,
     )
 
 

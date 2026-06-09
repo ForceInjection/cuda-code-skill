@@ -474,6 +474,113 @@ for (int row = blockIdx.y * blockDim.y + threadIdx.y;
 
 ---
 
+### Kernel Internal Phase Timing (clock64)
+
+**Purpose**: Measure elapsed GPU cycles between arbitrary points inside a kernel, enabling per-phase latency breakdown without external profilers. Unlike `cudaEvent` (which only captures full kernel duration), `clock64` lets you isolate individual pipeline stages (load, compute, store, sync) within a single launch.
+
+**Instruction**: `%%clock64` is a 64-bit GPU cycle counter that increments at a fixed rate regardless of SM frequency (unlike `%%clock` which tracks SM clock). The cycle-to-ns conversion depends on the GPU model (e.g., ~1.98 GHz on Hopper, ~1.41 GHz on Ampere); use `cudaDeviceGetAttribute` with `cudaDevAttrClockRate` for portability.
+
+**Template** — instrumented kernel with phase markers:
+
+```cuda
+// Per-block phase accumulators in global memory (or pinned for CPU readback)
+__global__ void instrumented_kernel(const float* A, const float* B, float* C,
+                                    int N, unsigned long long* phase_cyc) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int bid = blockIdx.x;
+
+    // Phase 0: Record start timestamp
+    unsigned long long t0;
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t0));
+
+    // ... Load phase ...
+    float val = A[tid];
+
+    unsigned long long t1;
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t1));
+
+    // ... Compute phase ...
+    float result = val * B[tid] + 1.0f;
+
+    unsigned long long t2;
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t2));
+
+    // ... Store phase ...
+    C[tid] = result;
+
+    unsigned long long t3;
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t3));
+
+    // Write phase deltas (thread 0 per block, to limit bandwidth overhead)
+    if (threadIdx.x == 0) {
+        phase_cyc[bid * 4 + 0] = t1 - t0;  // Load duration
+        phase_cyc[bid * 4 + 1] = t2 - t1;  // Compute duration
+        phase_cyc[bid * 4 + 2] = t3 - t2;  // Store duration
+        phase_cyc[bid * 4 + 3] = t3 - t0;  // Total kernel duration
+    }
+}
+```
+
+**Key design choices**:
+
+| Decision                        | Rationale                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| Only thread 0 writes            | Avoids atomic contention; phase deltas are uniform within a block for balanced workloads |
+| Use `%%clock64` (not `%%clock`) | `clock64` is fixed-rate, so deltas are directly comparable across SMs and clock states   |
+| Global memory output            | Pinned memory (`cudaHostAlloc`) enables CPU-side readback without `cudaMemcpy`           |
+| Per-block granularity           | Captures block-level skew (e.g., tail blocks finishing earlier)                          |
+
+**Readback on CPU side** (host code):
+
+```cpp
+unsigned long long* phase_cyc_gpu;
+cudaHostAlloc(&phase_cyc_gpu, num_blocks * 4 * sizeof(unsigned long long), cudaHostAllocMapped);
+// ... launch kernel with phase_cyc_gpu ...
+cudaDeviceSynchronize();
+
+double cyc_per_ns = 1.98;  // GPU-dependent; use cudaDeviceGetAttribute for portability
+for (int b = 0; b < num_blocks; b++) {
+    printf("Block %d: load=%llu cyc (%.1f us), compute=%llu cyc (%.1f us), "
+           "store=%llu cyc (%.1f us), total=%llu cyc (%.1f us)\n",
+           b,
+           phase_cyc_gpu[b * 4 + 0], phase_cyc_gpu[b * 4 + 0] / (cyc_per_ns * 1000.0),
+           phase_cyc_gpu[b * 4 + 1], phase_cyc_gpu[b * 4 + 1] / (cyc_per_ns * 1000.0),
+           phase_cyc_gpu[b * 4 + 2], phase_cyc_gpu[b * 4 + 2] / (cyc_per_ns * 1000.0),
+           phase_cyc_gpu[b * 4 + 3], phase_cyc_gpu[b * 4 + 3] / (cyc_per_ns * 1000.0));
+}
+```
+
+**Compile-time guard** (avoid overhead in production):
+
+```cuda
+#ifdef KERNEL_PROFILE
+    unsigned long long t0, t1;
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t0));
+#endif
+
+    // ... actual work ...
+
+#ifdef KERNEL_PROFILE
+    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t1));
+    if (threadIdx.x == 0) phase_cyc[blockIdx.x] = t1 - t0;
+#endif
+```
+
+Compile with `nvcc -DKERNEL_PROFILE ...` to enable; omit the flag for zero-overhead production builds.
+
+**Use case mapping**:
+
+| Question                                   | Phases to instrument           | What to look for                                                         |
+| ------------------------------------------ | ------------------------------ | ------------------------------------------------------------------------ |
+| Is the kernel load-bound or compute-bound? | Load vs compute deltas         | Load >> compute → DRAM/L1 bound                                          |
+| Is shared memory sync stalling?            | Before/after `__syncthreads()` | Large delta across sync → bank conflicts or load imbalance               |
+| Does compute overlap with memory?          | In double-buffering loop       | If compute delta stays constant as load delta grows → overlap is working |
+| Are tail tiles skewing block completion?   | Per-block total deltas         | Large variance across blocks → load imbalance                            |
+
+**Relationship to NCU**: `clock64` phase timing complements NCU profiling — it measures intra-kernel latency breakdown at the source level, while NCU provides hardware counter metrics (DRAM throughput, L1 hit rate, occupancy). Use both together: NCU identifies the bottleneck type; `clock64` pinpoints which specific code region causes it.
+
+---
+
 ## Common Bottleneck → Optimization Mapping
 
 | NCU Characteristic                      | Bottleneck Type   | Priority Optimization                                             |

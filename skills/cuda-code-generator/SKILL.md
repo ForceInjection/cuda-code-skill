@@ -102,6 +102,59 @@ Quick reference for strategies corresponding to each bottleneck type (see refere
 - **Architecture Compatibility**: `cp.async` / `__pipeline` are only supported on sm_80+ (Ampere) and above
 - **Function Signature Unchanged**: Host calling interface must remain consistent with the original kernel
 
+#### Conditional Profiling Instrumentation (`-DKERNEL_PROFILE`)
+
+When generating an optimized kernel, **optionally** include compile-time-guarded profiling instrumentation that can be toggled via a compile flag. This allows the same `.cu` file to serve both production (zero overhead) and diagnostic (per-phase timing) use cases without maintaining separate source files.
+
+**Pattern** — wrap profiling code in `#ifdef KERNEL_PROFILE`:
+
+```cuda
+// Profiling output buffer (only allocated when KERNEL_PROFILE is defined)
+#ifdef KERNEL_PROFILE
+__constant__ unsigned long long g_phase_cyc[4 * 256];  // Per-block phase deltas
+#endif
+
+extern "C" void solve(const float* A, const float* B, float* C, int M, int N, int K) {
+    dim3 block(16, 16);
+    dim3 grid((N + 15) / 16, (M + 15) / 16);
+
+#ifdef KERNEL_PROFILE
+    unsigned long long *phase_out;
+    cudaHostAlloc(&phase_out, grid.x * grid.y * 4 * sizeof(unsigned long long),
+                  cudaHostAllocMapped);
+    kernel<<<grid, block>>>(A, B, C, M, N, K, phase_out);
+    cudaDeviceSynchronize();
+    // Print phase breakdown
+    printf("=== Kernel Phase Timing (clock64 cycles) ===\n");
+    for (int b = 0; b < grid.x * grid.y; b++) {
+        printf("Block %d: load=%llu compute=%llu store=%llu total=%llu\n",
+               b, phase_out[b*4], phase_out[b*4+1], phase_out[b*4+2], phase_out[b*4+3]);
+    }
+    cudaFreeHost(phase_out);
+#else
+    kernel<<<grid, block>>>(A, B, C, M, N, K);
+#endif
+}
+```
+
+Compile commands:
+
+```bash
+# Production build — zero profiling overhead
+nvcc -O3 -arch=sm_89 -o kernel solution.cu
+
+# Diagnostic build — includes phase timing
+nvcc -O3 -arch=sm_89 -DKERNEL_PROFILE -o kernel_profile solution.cu
+```
+
+**When to include this pattern**:
+
+- The user asks for "debug" or "diagnostic" output
+- The optimization involves overlapping techniques (double buffering, async copy) where phase overlap needs verification
+- The user reports that NCU metrics don't match expected performance → use clock64 phase timing to isolate the slow phase
+
+**Guiding principle**: Profiling guards add ~15-20 lines of boilerplate. Include them when the user's task involves performance diagnosis; skip them when generating a straightforward production kernel. The `#ifdef` pattern ensures the extra code never executes unless explicitly opted in at compile time.
+
 ---
 
 ## References

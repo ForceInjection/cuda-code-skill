@@ -40,7 +40,32 @@ python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000
 
 Reference files must define `def reference(*, <tensors>, <dims>, **kwargs):` with optional module-level `atol`/`rtol`.
 
+`benchmark.py` compiles kernels via `nvcc -ptx` and loads/launches them via CUDA Driver API (`cuLaunchKernel`). PTX files are **auto-cached** (`*.ptx` alongside the `.cu` source) — subsequent runs skip compilation. Delete the `.ptx` file to force recompilation.
+
+The separate `ncu_profile.py` script generates a self-contained C host program that compiles together with the kernel into a standalone executable — purpose-built for NCU profiling without subprocess interference.
+
 ### NCU Profiling
+
+Two approaches exist. **Prefer `ncu_profile.py`** (self-contained executable) — it avoids NCU disconnection caused by `benchmark.py`'s `nvcc` subprocess. The wrapping approach only works for quick `--set launch` profiles.
+
+**Recommended: Standalone executable via `ncu_profile.py`**
+
+```bash
+# Step 1: Build self-contained profiling executable
+python3 skills/kernel-benchmarker/scripts/ncu_profile.py <solution.cu> \
+    --N=1000000 --build-only
+
+# Step 2: Profile directly with NCU (no subprocess)
+# Default (--set launch): works everywhere, including containers, no PMU needed
+ncu --kernel-name solve --launch-skip 10 --launch-count 1 \
+    --set launch -o report -f ./<solution>_bench --N=1000000
+
+# Full metrics (--set full): requires host PMU access (perf_event_paranoid=0)
+ncu --kernel-name solve --launch-skip 10 --launch-count 1 \
+    --set full -o report -f ./<solution>_bench --N=1000000 --warmup=10 --repeat=22
+```
+
+**Alternative: Wrap benchmark.py directly** (may disconnect due to nvcc subprocess)
 
 ```bash
 ncu --target-processes all --profile-from-start on \
@@ -50,7 +75,18 @@ ncu --target-processes all --profile-from-start on \
     --PARAM=VALUE --repeat=22
 ```
 
+Sample NCU reports are available at `examples/ncu-profile/` (`.ncu-rep` binary + text export).
+
 ### Searching the Knowledge Base
+
+The knowledge base has a **two-layer structure**:
+
+| Layer               | Location                            | What it is                                                                                                                             |
+| ------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Search guides**   | `cuda-knowledge/references/*.md`    | Top-level index files with grep patterns, TOC, and navigation aids — read these first to understand what's available and how to search |
+| **Doc directories** | `cuda-knowledge/references/*-docs/` | The actual scraped markdown content organized by chapter/module                                                                        |
+
+Search guides: `ptx-isa.md`, `cublas.md`, `cuda-runtime.md`, `cuda-driver.md`, `cuda-math.md`, `nccl.md`, `debugging-tools.md`, `ncu-guide.md`, `nsys-guide.md`, `nvtx-patterns.md`, `performance-traps.md`.
 
 ```bash
 # cuBLAS
@@ -93,6 +129,7 @@ python3 scripts/check_skills.py
 python3 scripts/check_counts.py
 
 # Verify cuda-samples skill paths against the submodule
+# Requires: git submodule update --init (shallow clone, ~220 MB)
 uv run scripts/check_links.py
 ```
 
@@ -102,7 +139,7 @@ uv run scripts/check_links.py
 
 Six skills form a complete optimization loop, orchestrated by `cuda-optimizer`:
 
-```
+```text
 cuda-knowledge (API reference docs)  +  cuda-samples (code pattern index)
          ↓                                    ↓
 cuda-optimizer (orchestrator)
@@ -111,7 +148,7 @@ cuda-optimizer (orchestrator)
     └── cuda-code-generator  → generate/rewrite .cu files with optimizations
 ```
 
-`cuda-knowledge` (~1040 markdown files) provides API reference; `cuda-samples` (SKILL.md ~13 KB, 8 reference files 48 KB; ~50 curated entries) provides concrete working code patterns from official NVIDIA samples with GitHub permalinks and key snippets. Both follow progressive disclosure: lightweight SKILL.md stays in context, detailed references load on demand. All three action skills ground their work in both to reduce hallucination. The optimizer drives this loop: **benchmark → evaluate exit conditions → NCU profile → implement optimizations → repeat** until performance converges (<2% improvement over 2 consecutive rounds).
+`cuda-knowledge` (~1040 markdown files) provides API reference; `cuda-samples` (SKILL.md ~13 KB, 10 reference files 48 KB; ~50 curated entries) provides concrete working code patterns from official NVIDIA samples with GitHub permalinks and key snippets. Both follow progressive disclosure: lightweight SKILL.md stays in context, detailed references load on demand. All three action skills ground their work in both to reduce hallucination. The optimizer drives this loop: **benchmark → evaluate exit conditions → NCU profile → implement optimizations → repeat** until performance converges (<2% improvement over 2 consecutive rounds).
 
 ### Kernel Interface Convention
 
@@ -132,27 +169,34 @@ extern "C" void solve(const float* A, const float* B, float* C, int M, int N, in
 
 A single 951-line script with three scraper classes for different NVIDIA doc formats:
 
-| Format | Class | Examples | Strategy |
-|--------|-------|----------|----------|
-| Sphinx single-page | `SphinxScraper` | PTX ISA, cuBLAS | Split monolithic HTML by heading hierarchy into per-section .md files |
-| Sphinx multi-page | `SphinxMultiPageScraper` | NCCL | Crawl toctree links, convert each page |
-| Doxygen multi-page | `APIScraper` | Runtime, Driver, Math API | Two-phase: download raw → clean (strip TOC, footer, boilerplate, URLs; 76-83% size reduction). `--skip-download` re-runs only the clean phase. |
+| Format             | Class                    | Examples                  | Strategy                                                                                                                                       |
+| ------------------ | ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sphinx single-page | `SphinxScraper`          | PTX ISA, cuBLAS           | Split monolithic HTML by heading hierarchy into per-section .md files                                                                          |
+| Sphinx multi-page  | `SphinxMultiPageScraper` | NCCL                      | Crawl toctree links, convert each page                                                                                                         |
+| Doxygen multi-page | `APIScraper`             | Runtime, Driver, Math API | Two-phase: download raw → clean (strip TOC, footer, boilerplate, URLs; 76-83% size reduction). `--skip-download` re-runs only the clean phase. |
 
 ### Directory Structure
 
-```
+```text
 skills/
   cuda-knowledge/references/     # ~1040 .md files (PTX, cuBLAS, Runtime, Driver, Math, NCCL)
     *-docs/                      # Scraped documentation organized by chapter/module
     *.md                         # Search guides with grep patterns per API
   cuda-samples/
     SKILL.md                     # Quick reference table, optimization mapping, arch compatibility
-    references/                  # 8 topic files with detailed code snippets & GitHub permalinks
+    references/                  # 10 topic files with detailed code snippets & GitHub permalinks:
+                                 #   getting-started, tensor-core-gemm, reduction-scan-sort,
+                                 #   cuda-graphs, streams-async, cuda-libraries, framework-interop,
+                                 #   multi-gpu, performance, advanced-topics
   cuda-optimizer/SKILL.md        # Orchestrator — drives the full optimization loop
   cuda-code-generator/SKILL.md   # Generates .cu files, must consult cuda-knowledge + cuda-samples
   ncu-rep-analyzer/SKILL.md      # NCU profiling + bottleneck classification + optimization suggestions
   kernel-benchmarker/SKILL.md    # Compile, validate, benchmark via benchmark.py
+examples/
+  vectorAdd/                     # Compilable kernel + reference (use as template)
+  ncu-profile/                   # Sample .ncu-rep (binary) and text export
 nvidia_doc_sync/                 # Documentation scraper and its README
+scripts/                         # Validation scripts (check_skills, check_counts, check_links)
 ```
 
 ### Key Design Decisions
@@ -161,3 +205,5 @@ nvidia_doc_sync/                 # Documentation scraper and its README
 - **Optimizer never stops mid-loop** — after each sub-skill returns, the orchestrator immediately proceeds to the next step. The output of one sub-skill is the input for the next.
 - **New kernel versions get timestamped filenames** — `solution_opt_20260316_153045.cu`, never overwrite the original.
 - **Knowledge-grounding is mandatory** — code-generator and ncu-rep-analyzer must consult both `cuda-knowledge/references/` (API signatures) and `cuda-samples/SKILL.md` (working code patterns) before generating code or recommendations involving complex APIs (cuBLASLt, Tensor Core, FP8 types).
+- **PTX-cached benchmarks** — `benchmark.py` caches compiled PTX files (`*.ptx`) beside the `.cu` source. Delete the `.ptx` to force recompilation when the kernel changes.
+- **Permissions** — `.claude/settings.json` pre-approves `python3`, `uv run`, `git submodule`, and `git` commands. If adding new automation scripts, register them there to avoid permission prompts.
