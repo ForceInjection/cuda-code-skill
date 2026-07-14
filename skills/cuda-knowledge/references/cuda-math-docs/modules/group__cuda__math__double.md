@@ -279,7 +279,7 @@ Calculate the maximum value of the input `double` and `float` arguments.
 __device__ double max(const double a, const double b)
 
 
-Calculate the maximum value of the input `float` arguments.
+Calculate the maximum value of the input `double` arguments.
 
 __device__ double min(const float a, const double b)
 
@@ -289,7 +289,7 @@ Calculate the minimum value of the input `float` and `double` arguments.
 __device__ double min(const double a, const double b)
 
 
-Calculate the minimum value of the input `float` arguments.
+Calculate the minimum value of the input `double` arguments.
 
 __device__ double min(const double a, const float b)
 
@@ -1676,7 +1676,7 @@ __device__ double max(const double a, const double b)
 
 
 
-Calculate the maximum value of the input `float` arguments.
+Calculate the maximum value of the input `double` arguments.
 
 Calculate the maximum value of the arguments `a` and `b`. Behavior is equivalent to fmax() function.
 
@@ -1696,7 +1696,7 @@ __device__ double min(const double a, const double b)
 
 
 
-Calculate the minimum value of the input `float` arguments.
+Calculate the minimum value of the input `double` arguments.
 
 Calculate the minimum value of the arguments `a` and `b`. Behavior is equivalent to fmin() function.
 

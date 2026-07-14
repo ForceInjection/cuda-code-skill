@@ -54,12 +54,12 @@ usage: scrape_cuda_docs.py [-h] [--output-dir OUTPUT_DIR] [--skip-download] [--f
 
 | 参数      | 描述                                                                    |
 | --------- | ----------------------------------------------------------------------- |
-| `ptx`     | 抓取 PTX ISA 文档（单页面结构，会被拆分为约 405 个文件）                |
+| `ptx`     | 抓取 PTX ISA 文档（单页面结构，会被拆分为约 679 个文件）                |
 | `runtime` | 抓取 CUDA Runtime API 文档（多页面结构：包含模块和数据结构）            |
 | `driver`  | 抓取 CUDA Driver API 文档（多页面结构：包含模块和数据结构）             |
 | `math`    | 抓取 CUDA Math API 文档（多页面结构：包含模块和数据结构，约 41 个文件） |
-| `cublas`  | 抓取 cuBLAS 文档（单页面 Sphinx 结构，按章节拆分为约 319 个文件）       |
-| `nccl`    | 抓取 NCCL 文档（多页面 Sphinx 站点，约 34 个文件，按主题组织）          |
+| `cublas`  | 抓取 cuBLAS 文档（单页面 Sphinx 结构，按章节拆分为约 354 个文件）       |
+| `nccl`    | 抓取 NCCL 文档（多页面 Sphinx 站点，约 57 个文件，按主题组织）          |
 
 ### 3.2 选项参数
 
@@ -104,7 +104,7 @@ skills/cuda-knowledge/references/cublas-docs/
 ├── 2-using-the-cublas-api/
 ├── 3-using-the-cublaslt-api/
 ├── 4-using-the-cublasxt-api/
-└── ...                     # 总计约 319 个文件
+└── ...                     # 总计约 354 个文件
 ```
 
 与 PTX ISA 采用相同的按标题拆分策略 —— cuBLAS 文档也是一个单页面的 Sphinx HTML 文件。

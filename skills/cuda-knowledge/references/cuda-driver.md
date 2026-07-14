@@ -16,7 +16,7 @@
 
 ## Local Documentation
 
-**Complete CUDA Driver API 13.1 documentation is available locally at `cuda-driver-docs/`**
+**Complete CUDA Driver API 13.3 documentation is available locally at `cuda-driver-docs/`**
 
 The documentation has been converted to markdown with:
 
@@ -253,7 +253,7 @@ grep "cuGraphLaunch" cuda-driver-docs/modules/group__cuda__graph.md
 
 ## Version Information
 
-- **CUDA Toolkit Version**: 13.1
+- **CUDA Toolkit Version**: 13.3
 - **Documentation Date**: December 4, 2025
 - **Total Size**: 1.2 MB (76% reduction from 3.6 MB raw)
 - **Files**: 50 modules + 80 data structures + 1 index

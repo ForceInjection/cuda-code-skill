@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-- [Local Documentation](#local-documentation) — 319 markdown files, 2.9MB
+- [Local Documentation](#local-documentation) — 354 markdown files, 3.0MB
 - [When to Use cuBLAS Documentation](#when-to-use-cublas-documentation) — GEMM, batched ops, cuBLASLt, FP8
 - [Quick Search Examples](#quick-search-examples) — GEMM, epilogues, compute types, FP8
 - [cuBLAS vs cuBLASLt vs cuBLASXt](#cublas-vs-cublaslt-vs-cublasxt) — Which API to use
@@ -16,12 +16,12 @@
 
 ## Local Documentation
 
-**Complete cuBLAS 13.2 documentation is available locally at `cublas-docs/`**
+**Complete cuBLAS 13.3 documentation is available locally at `cublas-docs/`**
 
 The documentation has been converted to markdown with:
 
 - ✅ All function signatures, parameters, and return values preserved
-- ✅ 319 files organized by chapter (2.9 MB)
+- ✅ 354 files organized by chapter (3.0 MB)
 - ✅ Full searchability with grep/ripgrep
 - ✅ Type, enum, and function names preserved (redundant URLs removed)
 - ✅ Detailed descriptions, notes, and caveats
@@ -251,7 +251,7 @@ grep -A 5 "workspace" cublas-docs/2-using-the-cublas-api/2.4.8-cublassetworkspac
 
 ## Version Information
 
-- **cuBLAS Version**: 13.2
-- **Total Size**: 2.9 MB
-- **Files**: 319 files across 8 chapters
+- **cuBLAS Version**: 13.3
+- **Total Size**: 3.0 MB
+- **Files**: 354 files across 8 chapters
 - **Source**: https://docs.nvidia.com/cuda/cublas/index.html

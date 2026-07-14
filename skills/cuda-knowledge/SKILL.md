@@ -216,22 +216,22 @@ nvcc program.cu -lnvToolsExt -o program
 
 Complete reference documentation available for grep-based search:
 
-**PTX ISA 9.1** — `references/ptx-docs/` (405 files, 2.3MB)
+**PTX ISA 9.3** — `references/ptx-docs/` (679 files, 7.6MB)
 
 - Search guide: `references/ptx-isa.md`
 - Use for: Instruction-level optimization, inline PTX, TensorCore operations (WMMA, WGMMA, TMA), memory swizzling
 
-**CUDA Runtime API 13.1** — `references/cuda-runtime-docs/` (104 files, 1.2MB)
+**CUDA Runtime API 13.3** — `references/cuda-runtime-docs/` (104 files, 1.1MB)
 
 - Search guide: `references/cuda-runtime.md`
 - Use for: Error codes, API parameters, device properties (`cudaDeviceProp`), memory management, stream behavior
 
-**CUDA Driver API 13.1** — `references/cuda-driver-docs/` (129 files, 1.2MB)
+**CUDA Driver API 13.3** — `references/cuda-driver-docs/` (129 files, 1.2MB)
 
 - Search guide: `references/cuda-driver.md`
 - Use for: Context management (`cuCtxCreate`), module loading (`cuModuleLoad`), virtual memory, Driver errors (`CUDA_ERROR_*`), advanced features
 
-**cuBLAS 13.2** — `references/cublas-docs/` (319 files, 2.9MB)
+**cuBLAS 13.3** — `references/cublas-docs/` (354 files, 3.0MB)
 
 - Search guide: `references/cublas.md`
 - Chapters: `1-introduction/`, `2-using-the-cublas-api/`, `3-using-the-cublaslt-api/`, `4-using-the-cublasxt-api/`
@@ -254,7 +254,7 @@ Complete reference documentation available for grep-based search:
   - `modules/group__cuda__math__intrinsic__half.md` — `__half` arithmetic operations
   - `modules/group__cuda__math__intrinsic__bfloat16.md` — `__nv_bfloat16` operations
 
-**NCCL** — `references/nccl-docs/` (34 files, 516K)
+**NCCL** — `references/nccl-docs/` (57 files, 760K)
 
 - Search guide: `references/nccl.md`
 - Structure: `usage/` (11 files — communicators, collectives, streams, P2P, CUDA graphs), `api/` (12 files — colls, comms, p2p, types, device API), top-level guides (overview, env, troubleshooting, examples, mpi)

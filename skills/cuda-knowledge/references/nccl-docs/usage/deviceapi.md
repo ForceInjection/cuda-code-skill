@@ -12,7 +12,7 @@ Starting with version 2.28, NCCL provides a device-side communication API, makin
 
 Device API consists of the following modules:
 
->   * **:ref:`LSA <device_api_lsa>` (Load/Store Accessible)** – for communication between devices accessible via memory load/store operations, using CUDA P2P. This includes devices connected over NVLink and some devices connected over PCIe, so long as they have P2P connectivity with each other (as indicated by `nvidia-smi topo -p2p p`). Up to NCCL 2.28.3, the availability of LSA was also subject to the [NCCL_P2P_LEVEL](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#env-nccl-p2p-level) distance check, but that is no longer the case with newer versions.
+>   * **LSA (Load/Store Accessible)** – for communication between devices accessible via memory load/store operations, using CUDA P2P. This includes devices connected over NVLink and some devices connected over PCIe, so long as they have P2P connectivity with each other (as indicated by `nvidia-smi topo -p2p p`). Up to NCCL 2.28.3, the availability of LSA was also subject to the [NCCL_P2P_LEVEL](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#env-nccl-p2p-level) distance check, but that is no longer the case with newer versions. See [LSA](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/bufferreg.html#device-api-lsa).
 > 
 >   * **Multimem** – for communication between devices using the hardware multicast feature provided by NVLink SHARP (available on some datacenter GPUs since the Hopper generation).
 > 
@@ -40,6 +40,19 @@ GIN has the following requirements:
   * Network topology: Requires full NIC connectivity. Does not support topologies where NICs cannot communicate across rails. Also does not support `NCCL_CROSS_NIC=0`.
 
   * Fused NICs are not supported. To use GIN on dual-port NICs, set `NCCL_IB_MERGE_NICS=0`
+
+  * Using GIN for buffers that are backed by multiple cuMem segments requires DMA-BUF
+
+
+When using host-backed buffers, the following additional limitations apply:
+
+  * Host segments must be allocated with `CU_MEM_LOCATION_TYPE_HOST_NUMA`.
+
+  * DirectNIC is not supported.
+
+  * LSA Multimem is not supported.
+
+  * Host RMA APIs are not supported.
 
 
 Using the host RMA API requires CUDA 12.5 or greater.
@@ -87,7 +100,7 @@ Depending on the kernel and application requirements, the same window can be use
     template <typename T>
     __global__ void inPlaceAllReduceKernel(ncclDevComm devComm, ncclWindow_t win, size_t offset, size_t count) {
       ncclLsaBarrierSession<ncclCoopCta> bar { ncclCoopCta(), devComm, ncclTeamTagLsa(), blockIdx.x };
-      bar.sync(ncclCoopCta(), cuda::memory_order_relaxed);
+      bar.sync(ncclCoopCta(), cuda::memory_order_acquire);
     
       const int rank = devComm.lsaRank, nRanks = devComm.lsaSize;
       const int globalTid = threadIdx.x + blockDim.x * (rank + blockIdx.x * nRanks);
@@ -163,12 +176,23 @@ To address remote ranks or perform barriers, NCCL refers to subsets of ranks wit
 > 
 >   * `ncclTeamLsa()` – all the peers accessible from the local rank using load/store operations.
 > 
->   * `ncclTeamRail()` – the set of peers directly accessible from the local rank over the network, assuming that the network fabric is rail-optimized (see [NCCL_CROSS_NIC](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#env-nccl-cross-nic)).
+>   * `ncclTeamRail()` – the set of peers that have the same rank number within their LSA team (a rail team is orthogonal to an LSA team).
 > 
 > 
 
 
 The `ncclTeam` structure contains fairly self-explanatory elements `nRanks`, `rank`, and `stride`. The device API contains functions to verify team membership, convert rank numbers between teams, etc. The world and LSA teams are always contiguous (stride `1`), whereas the rail team is typically not – its stride equals the size of the LSA team (the assumption is thus that each rank _n_ within the local LSA team has direct network connectivity with corresponding ranks _n_ of all remote LSA teams).
+
+## Segment Types[](#segment-types "Permalink to this heading")
+
+The `SegmentType` template parameter of [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") and [`ncclGin::get()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3getE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t4Coop14DescriptorSmem8uint32_t11SegmentType "ncclGin::get") describes the physical memory composition of the source and destination virtual addresses. Three tag types are defined:
+
+  * `ncclGin_SegmentDevice` (default) — the virtual addresses only contain cuMem segments of type `CU_MEM_LOCATION_TYPE_DEVICE`.
+
+  * `ncclGin_SegmentHostNuma` — the virtual addresses only contain cuMem segments of type `CU_MEM_LOCATION_TYPE_HOST_NUMA`.
+
+  * `ncclGin_SegmentMixed` — the virtual addresses contain a mix of `CU_MEM_LOCATION_TYPE_DEVICE` and `CU_MEM_LOCATION_TYPE_HOST_NUMA` segments.
+
 
 ## Host-Accessible Device Pointer Functions[](#host-accessible-device-pointer-functions "Permalink to this heading")
 
@@ -221,49 +245,77 @@ Usage Example:
 Important notes: Pointer lifetime is limited to the shorter of Window and Communicator lifetime. Functions should be called once and pointers cached for reuse. For detailed function documentation, see [Host-Accessible Device Pointer Functions](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#device-api-host-functions).
 
 ## GIN Device Kernel[](#gin-device-kernel "Permalink to this heading")
+
+The following illustrates pure GIN AlltoAll: all peer data moves over the network. The host creates a [`ncclDevComm`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevComm "ncclDevComm") with GIN-specific resources, registers symmetric memory windows (see [Window Registration](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/bufferreg.html#window-reg)), and launches a kernel that performs the collective using GIN.
     
+    
+    // Grid width (CTAs). Must match reqs.worldGinBarrierCount and reqs.ginSignalCount.
+    #define NCCL_DEVICE_CTA_COUNT 16
+    #define NCCL_DEVICE_THREADS_PER_CTA 512
     
     int main() {
       [...]
-      reqs = NCCL_DEV_COMM_REQUIREMENTS_INITIALIZER;
-      int nCTAs = 1;
-      reqs.railGinBarrierCount = nCTAs;
-      reqs.ginSignalCount = 1;
+      ncclDevCommRequirements reqs = NCCL_DEV_COMM_REQUIREMENTS_INITIALIZER;
+      reqs.worldGinBarrierCount = NCCL_DEVICE_CTA_COUNT;
+      reqs.ginSignalCount = NCCL_DEVICE_CTA_COUNT;
+      reqs.ginConnectionType = NCCL_GIN_CONNECTION_FULL;
       NCCLCHECK(ncclDevCommCreate(comm, &reqs, &devComm));
       [...]
     }
     
     template <typename T>
-    __global__ void ginAlltoAllKernel(ncclDevComm devComm, ncclWindow_t win,
-                                      size_t inputOffset, size_t outputOffset, size_t count) {
-      int ginContext = 0;
-      ncclGinSignal_t signalIndex = 0;
+    __global__ void PureGinAlltoAllKernel(ncclWindow_t sendwin, size_t sendoffset,
+                                          ncclWindow_t recvwin, size_t recvoffset,
+                                          size_t count, struct ncclDevComm devComm) {
+      int ginContext = 0; // single context for simplicity
+      unsigned int signalIndex = blockIdx.x;
       ncclGin gin { devComm, ginContext };
       uint64_t signalValue = gin.readSignal(signalIndex);
     
-      ncclGinBarrierSession<ncclCoopCta> bar { ncclCoopCta(), gin, ncclTeamWorld(devComm),
-                                               devComm.railGinBarrier, blockIdx.x };
-      bar.sync(ncclCoopCta(), cuda::memory_order_relaxed, ncclGinFenceLevel::Relaxed);
+      ncclGinBarrierSession<ncclCoopCta> bar { ncclCoopCta(), gin, ncclTeamTagWorld(), blockIdx.x };
+      bar.sync(ncclCoopCta(), cuda::memory_order_acquire, ncclGinFenceLevel::None);
     
-      const int rank = devComm.rank, nRanks = devComm.nRanks;
-      const int tid = threadIdx.x + blockIdx.x * blockDim.x;
-      const int nThreads = blockDim.x * gridDim.x;
+      int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      int nthreads = blockDim.x * gridDim.x;
     
       const size_t size = count * sizeof(T);
-      for (int peer = tid; peer < nRanks; peer += nThreads) {
-        gin.put(ncclTeamWorld(devComm), peer, win, outputOffset + rank * size,
-                win, inputOffset + peer * size, size, ncclGin_SignalInc{signalIndex});
+      for (int r = tid; r < devComm.nRanks; r += nthreads) {
+        gin.put(ncclTeamWorld(devComm), r,
+            recvwin, recvoffset + devComm.rank * size,
+            sendwin, sendoffset + r * size,
+            size, ncclGin_WeakSignalInc{signalIndex});
       }
     
-      gin.waitSignal(ncclCoopCta(), signalIndex, signalValue + nRanks);
+      // Wait only on the CTA whose blockIdx.x (signalIndex) accumulates all puts to this rank.
+      int receivingCta = (devComm.rank % nthreads) / blockDim.x;
+      if (blockIdx.x == receivingCta)
+        gin.waitSignal(ncclCoopCta(), signalIndex, signalValue + devComm.nRanks);
+    
       gin.flush(ncclCoopCta());
+      bar.sync(ncclCoopCta(), cuda::memory_order_release, ncclGinFenceLevel::None);
     }
     
 
-The above code excerpt demonstrates modifications needed to the earlier host code to enable GIN support, available since NCCL 2.28.7 (the lines with critical changes are highlighted), and also includes a GIN AlltoAll kernel. On the host side, compared to the LSA kernels, we request a launch on just a single CTA (because our kernel doesn’t have much to do) and we set `railGinBarrierCount` and `ginSignalCount` to request GIN-specific barriers and signals ([`ncclDevCommCreate()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommCreate "ncclDevCommCreate") will fail if GIN support is unavailable). As with LSA barriers, we need as many of them as CTAs, but signals (used for completion notifications) can be shared between CTAs so, for this simple example, we’ll use just one per rank (for performance-oriented kernels, keeping signals exclusive to each CTA can improve performance).
+The above code excerpt shows the GIN-related host setup for NCCL 2.30 and later (highlighted lines) together with the `PureGinAlltoAllKernel` kernel definition. GPU-initiated networking is available since NCCL 2.28.7. Version-specific host and kernel changes for older NCCL builds are summarized under [Compatibility adjustments](#deviceapi-gin-compat) at the end of this section.
 
-On the device side, GIN API centers around the `ncclGin` object, initialized using the device communicator and a GIN context index (`0` will do for this simple example but, for performance-oriented kernels, using multiple contexts can provide a performance boost). To avoid race conditions, the initial value of the signal must be read _prior to_ the synchronizing barrier. GIN-specific barriers look much like their LSA counterparts, being local to each CTA, but communicating over the network, not memory. _ncclTeamWorld_ indicates all the ranks of a communicator (this kernel assumes that all the ranks can reach one another over the network, which in general need not be the case – see [NCCL_CROSS_NIC](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#env-nccl-cross-nic)).
+In [`ncclDevCommRequirements`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommRequirements "ncclDevCommRequirements"), `worldGinBarrierCount` reserves slots for [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession") (network-side barriers) and `ginSignalCount` reserves per-CTA signals for completion. Both are set to the number of CTAs in the launch grid (here `NCCL_DEVICE_CTA_COUNT`), matching `gridDim.x`, so each thread block uses `blockIdx.x` as its barrier index and signal index. GIN relies on these barriers and signals for cross-rank synchronization and for tracking asynchronous work. Set `ginConnectionType` to `NCCL_GIN_CONNECTION_FULL` to connect each rank to all peers (see [`ncclGinConnectionType_t`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclGinConnectionType_t "ncclGinConnectionType_t")). [`ncclDevCommCreate()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommCreate "ncclDevCommCreate") fails if GIN cannot be provided.
 
-Unlike with the AllReduce kernels, for AlltoAll the calculated thread index needs to be unique only locally within each rank. This is then used to determine the destination peer. The main GIN data transfer operation is the one-sided `put()`, here launched in parallel on all participating threads, one per each destination peer (the loop is needed merely if the total rank count exceeds the local thread count – this is why we launched on just a single CTA). `put()` takes the usual arguments such as the destination rank and buffer address, the source buffer, and the transfer size. It also accepts several optional arguments; the above example takes advantage of the _remoteAction_ , requesting that the destination peer increments the value of its local signal once the payload has been settled.
+On the device, GIN barriers synchronize across ranks over the network. Each thread block uses `blockIdx.x` to select its barrier so blocks can coordinate with corresponding blocks on other nodes. A single GIN context is used here. Construct `ncclGin` with context index `0`. Each thread block reads its own per-CTA signal slot (`signalIndex == blockIdx.x`) before `bar.sync()` at kernel entry. The [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession") uses `ncclTeamTagWorld()` and `blockIdx.x`. The barrier ensures all ranks are ready before the AlltoAll exchange (`bar.sync()` at kernel entry).
 
-Once the local signal has been incremented by _nRanks_ , we know that every peer has deposited their data in this rank’s output buffer and thus that the buffer is ready; `waitSignal()` can be used to block until that happens. Before terminating, the kernel still needs to `flush()` all the previously initiated outgoing `put()` operations – while that does not guarantee remote completion, it does ensure that the local input buffer is safe to reuse. We can skip an explicit barrier at the end, since `waitSignal()` and `flush()` together ensure that nobody else is using this rank’s buffers.
+Unlike AllReduce-style kernels, for AlltoAll the per-thread index only needs to be unique _within this rank_. That index then selects the destination peer. The main data transfer is performed using the one-sided `put()`, launched in parallel on all participating threads with one `put()` per destination peer. The loop is needed whenever the communicator size exceeds the number of threads that take part in the loop (here, `threadIdx.x + blockIdx.x * blockDim.x` stepping by `blockDim.x * gridDim.x`). `put()` takes the usual arguments: destination rank, destination and source windows and offsets, transfer size, and optional actions. This example passes `ncclGin_WeakSignalInc{signalIndex}` as _remoteAction_ so the destination rank receives one completion increment once the payload is settled. The receiver waits for the count of completed incoming puts for that signal slot.
+
+Each CTA uses `signalIndex = blockIdx.x` on its outgoing [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") operations. On the destination rank, each peer’s [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") contributes one increment to the signal slot indexed by that sender CTA’s `blockIdx.x`. All CTAs participate in issuing [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put"), but only the _receiving CTA_ , a single thread block on this rank, must observe completion for that rank’s signal slot. The kernel sets `receivingCta = (devComm.rank % nthreads) / blockDim.x` so that exactly that thread block runs `waitSignal()` for `signalIndex == receivingCta`. Every other CTA skips `waitSignal()` and only issues [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") and later `flush()`.
+
+Once the signal watched by `receivingCta` has been incremented `nRanks` times, every peer has deposited its contribution into this rank’s receive buffer and the buffer is ready for consumption. That CTA’s `waitSignal()` blocks until that threshold using `signalValue + devComm.nRanks`, because each peer issues one inbound [`ncclGin::put()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") that advances this rank’s counter for that `signalIndex`. Before terminating, the kernel still calls `flush()` on all CTAs to commit outstanding outgoing `put()` operations. While `flush()` does not guarantee full remote completion of every side effect, it does ensure the local send buffer is safe to reuse from this kernel’s perspective. After `waitSignal()` and `flush()`, `bar.sync()` runs again. The barrier is added so that all ranks complete the collective before any rank exits the kernel.
+
+### Compatibility adjustments[](#compatibility-adjustments "Permalink to this heading")
+
+The host setup, kernel, and explanation above reflect the NCCL 2.30 version and later. When targeting an older build, use the following as needed.
+
+  * **GPU-initiated networking (GIN) baseline** — GIN is available since NCCL 2.28.7. [`ncclDevCommCreate()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommCreate "ncclDevCommCreate") and `ncclGin` require a communicator that supports the device API and GIN.
+
+  * **Before NCCL 2.30 — no** `worldGinBarrierCount` — [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession") was only usable for rail connectivity, with the corresponding `railGinBarrierCount`. For world-team GIN barriers, set `barrierCount` to the number of CTAs (same as `gridDim.x`). In the kernel, use the hybrid `ncclBarrierSession` with `ncclTeamTagWorld()` together with `ncclGin` instead of [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession") with `ncclTeamTagWorld()`.
+
+  * **Before NCCL 2.29.7 — no** `ginConnectionType` — Set `ginForceEnable` to `true` to enable full GIN connectivity (equivalent to `NCCL_GIN_CONNECTION_FULL` once `ginConnectionType` exists). The `ginConnectionType` field is available starting with NCCL 2.29.7 (see [`ncclDevCommRequirements`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommRequirements "ncclDevCommRequirements") in [Device API – Host-Side Setup](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#device-api-setup)).
+
+  * **Deprecated** `ginForceEnable` — Prefer `ginConnectionType` on NCCL 2.29.7 and later. `ginForceEnable` is deprecated since NCCL 2.29.7.

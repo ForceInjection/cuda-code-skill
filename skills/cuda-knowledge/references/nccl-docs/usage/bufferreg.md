@@ -143,6 +143,12 @@ Since 2.23.x, NCCL supports intra-node buffer registration, which targets all pe
 
 The user buffers can be allocated through VMM API (i.e., cuMem*), any VMM-based allocators ([Memory Allocator](#mem-allocator)) or ncclMemAlloc will work. The buffers allocated through legacy cuda API (e.g., cudaMalloc) can also be used for registration. However, it is not safe due to the potential hang during execution and segmentation fault during failure and abort, so using legacy buffers for registration is not recommended; currently, legacy buffer registration is disabled by default, users can set NCCL_LEGACY_CUDA_REGISTER=1 to enable it.
 
+## Buffer Registration, GPU Direct RDMA, and MPS with MLOPart[](#buffer-registration-gpu-direct-rdma-and-mps-with-mlopart "Permalink to this heading")
+
+To ensure optimal performance for scale-out communications, we recommend the usage of ncclMemAlloc, or alternatively cuMemCreate with the attribute gpuDirectRDMACapable. Failing to do so might force NCCL to use an internal staging buffer and therefore offset the gain provided by the user-buffer registration.
+
+Further, mixing buffers allocated with different allocators maybe result in undefined behavior.
+
 ## Buffer Registration and PXN[](#buffer-registration-and-pxn "Permalink to this heading")
 
 Buffer registration for network communication (e.g., InfiniBand) and PXN are inherently incompatible. PXN is enabled by default in NCCL as long as the platform supports it, and it can be used for sendrecv-based operations and collectives. When PXN is enabled, the network buffer registration will not be enabled even if users have called ncclCommRegister to register the buffers. To enable network buffer registration, users can set NCCL_PXN_DISABLE=1 to disable PXN.
@@ -203,19 +209,21 @@ See the description of [`ncclCommWindowRegister()`](https://docs.nvidia.com/deep
 
 ## Zero-CTA Optimization[](#zero-cta-optimization "Permalink to this heading")
 
-Since NCCL version 2.28, NCCL supports zero-CTA optimization. Zero-CTA optimization aims to avoid the use of CTA for communication and to overlap communication and computation.
+NCCL supports zero-CTA optimization to avoid the use of CTA for communication and to overlap communication and computation.
 
-Current zero-CTA optimization supports using the Copy Engine (CE) to perform the communication. The following are the requirements to enable zero-CTA optimization with CE:
+Zero-CTA over NVLink with Copy Engine (CE) is supported since NCCL 2.28; zero-CTA across the network (CPU proxy inter-node and CE intra-node) is supported since NCCL 2.30.6. The following are the requirements to enable zero-CTA optimization:
 
 >   * CUDA driver version >= 12.5
-> 
->   * Collectives run within a single NVL or MNNVL domain (does not support network, e.g., IB/ROCE)
 > 
 >   * The buffer is symmetrically registered with the NCCL window
 > 
 >   * The communicator is configured with the `NCCL_CTA_POLICY_ZERO` flag (please see [NCCL Communicator CTA Policy Flags](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/flags.html#cta-policy-flags))
 > 
->   * Supported collectives are AlltoAll, AllGather, Scatter, and Gather
+>   * Supported collectives:
+> 
+>     * Within a single NVL or MNNVL domain: AlltoAll, AllGather, Scatter, and Gather
+> 
+>     * Across the network: AlltoAll and AllGather
 > 
 > 
 

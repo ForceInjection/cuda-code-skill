@@ -238,7 +238,7 @@ grep "^__device__.*unsigned int\|vadd\|vmax\|vsub" cuda-math-docs/modules/group_
 
 ## Version Information
 
-- **CUDA Math API Version**: 13.x
+- **CUDA Math API Version**: 13.3
 - **Total Size**: 528 KB (26.5% reduction from 0.6 MB raw)
 - **Files**: 14 modules + 26 data structures + 1 index
 - **Source**: https://docs.nvidia.com/cuda/cuda-math-api/

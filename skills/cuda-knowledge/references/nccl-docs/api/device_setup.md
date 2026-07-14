@@ -90,13 +90,13 @@ int railGinBarrierCount[](#c.ncclDevCommRequirements.railGinBarrierCount "Per
 
     
 
-Specifies the number of network barriers to allocate (see [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession"); available since NCCL 2.28.7).
+Specifies the number of railed network barriers to allocate (see [`ncclGinBarrierSession`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession"); available since NCCL 2.28.7).
 
 int barrierCount[](#c.ncclDevCommRequirements.barrierCount "Permalink to this definition")  
 
     
 
-Specifies the minimum number for both the memory and network barriers (see above; available since NCCL 2.28.7).
+Specifies the number of network/rail hybrid barriers to allocate (see `ncclBarrierSession`; available since NCCL 2.28.7).
 
 int ginSignalCount[](#c.ncclDevCommRequirements.ginSignalCount "Permalink to this definition")  
 
@@ -114,13 +114,13 @@ bool ginForceEnable[](#c.ncclDevCommRequirements.ginForceEnable "Permalink to
 
     
 
-**Deprecated.** Forces GIN (GPU-Initiated Networking) support to be enabled by automatically setting `ginConnectionType` to `NCCL_GIN_CONNECTION_FULL`. This field is deprecated in favor of explicitly setting [`ginConnectionType`](#c.ncclDevCommRequirements.ginConnectionType "ginConnectionType") to the desired value. When set to `true`, it overrides the `ginConnectionType` field. New code should use [`ginConnectionType`](#c.ncclDevCommRequirements.ginConnectionType "ginConnectionType") directly instead of this field. Available since NCCL 2.28.7, deprecated since NCCL 2.29.4.
+**Deprecated.** Forces GIN (GPU-Initiated Networking) support to be enabled by automatically setting `ginConnectionType` to `NCCL_GIN_CONNECTION_FULL`. This field is deprecated in favor of explicitly setting [`ginConnectionType`](#c.ncclDevCommRequirements.ginConnectionType "ginConnectionType") to the desired value. When set to `true`, it overrides the `ginConnectionType` field. New code should use [`ginConnectionType`](#c.ncclDevCommRequirements.ginConnectionType "ginConnectionType") directly instead of this field. Available since NCCL 2.28.7, deprecated since NCCL 2.29.7.
 
 [ncclGinConnectionType_t](#c.ncclGinConnectionType_t "ncclGinConnectionType_t") ginConnectionType[](#c.ncclDevCommRequirements.ginConnectionType "Permalink to this definition")  
 
     
 
-Specifies the type of GIN (GPU-Initiated Networking) connection to establish for the device communicator. This field controls whether GIN is enabled and how it is configured. When set to `NCCL_GIN_CONNECTION_FULL`, GIN is initialized and all ranks connect to all other ranks in the communicator. When set to `NCCL_GIN_CONNECTION_RAIL`, GIN is initialized and each rank connects to other ranks in the same rail team. If GIN resources are requested via `ginSignalCount`, `ginCounterCount`, `barrierCount`, or `railGinBarrierCount` while this field is set to `NCCL_GIN_CONNECTION_NONE`, device communicator creation will fail with `ncclInvalidArgument`. Available since NCCL 2.29.4.
+Specifies the type of GIN (GPU-Initiated Networking) connection to establish for the device communicator. This field controls whether GIN is enabled and how it is configured. When set to `NCCL_GIN_CONNECTION_FULL`, GIN is initialized and all ranks connect to all other ranks in the communicator. When set to `NCCL_GIN_CONNECTION_RAIL`, GIN is initialized and each rank connects to other ranks in the same rail team. If GIN resources are requested via `ginSignalCount`, `ginCounterCount`, `barrierCount`, or `railGinBarrierCount` while this field is set to `NCCL_GIN_CONNECTION_NONE`, device communicator creation will fail with `ncclInvalidArgument`. Available since NCCL 2.29.7.
 
 See [`ncclGinConnectionType_t`](#c.ncclGinConnectionType_t "ncclGinConnectionType_t") for possible values.
 
@@ -135,6 +135,30 @@ ncclTeamRequirements_t *teamRequirementsList[](#c.ncclDevCommRequirements.tea
     
 
 Specifies a list of requirements for particular teams. This is best set to NULL for now.
+
+int ginTrafficClass[](#c.ncclDevCommRequirements.ginTrafficClass "Permalink to this definition")  
+
+    
+
+Specifies the GIN traffic class. See [Quality of Service](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/communicators.html#communicators-qos) for more details. Available since NCCL 2.30.3.
+
+int worldGinBarrierCount[](#c.ncclDevCommRequirements.worldGinBarrierCount "Permalink to this definition")  
+
+    
+
+Specifies the number of world network barriers to allocate. Available since NCCL 2.30.3.
+
+bool ginStrongSignalsRequired[](#c.ncclDevCommRequirements.ginStrongSignalsRequired "Permalink to this definition")  
+
+    
+
+Specifies whether GIN strong signals are required. Set to false if kernels using this communicator will not use strong signal operations (such as [`ncclGin_StrongSignalInc`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv423ncclGin_StrongSignalInc "ncclGin_StrongSignalInc") and [`ncclGin_StrongVASignalAdd`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv425ncclGin_StrongVASignalAdd "ncclGin_StrongVASignalAdd")). Default is true. Available since NCCL 2.30.5.
+
+bool ginVaSignalsRequired[](#c.ncclDevCommRequirements.ginVaSignalsRequired "Permalink to this definition")  
+
+    
+
+Specifies whether GIN VA signals are required. Set to false if kernels using this communicator do not use GIN VA signals (such as [`ncclGin_WeakVASignalInc`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv423ncclGin_WeakVASignalInc "ncclGin_WeakVASignalInc") and [`ncclGin_StrongVASignalAdd`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_gin.html#_CPPv425ncclGin_StrongVASignalAdd "ncclGin_StrongVASignalAdd")). Default is true. Available since NCCL 2.30.5.
 
 ### ncclCommQueryProperties[](#ncclcommqueryproperties "Permalink to this heading")
 
@@ -200,13 +224,13 @@ int nLsaTeams[](#c.ncclCommProperties_t.nLsaTeams "Permalink to this definiti
 
     
 
-The number of [LSA](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/bufferreg.html#device-api-lsa) teams across the entire communicator. Available since NCCL 2.29.4.
+The number of [LSA](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/bufferreg.html#device-api-lsa) teams across the entire communicator. Available since NCCL 2.29.7.
 
 [ncclGinType_t](#c.ncclGinType_t "ncclGinType_t") railedGinType[](#c.ncclCommProperties_t.railedGinType "Permalink to this definition")  
 
     
 
-The railed GIN type supported by the communicator. If equal to `NCCL_GIN_TYPE_NONE`, a [`ncclDevComm`](#c.ncclDevComm "ncclDevComm") cannot be created with GIN connection type `NCCL_GIN_CONNECTION_RAIL`. Available since NCCL 2.29.4.
+The railed GIN type supported by the communicator. If equal to `NCCL_GIN_TYPE_NONE`, a [`ncclDevComm`](#c.ncclDevComm "ncclDevComm") cannot be created with GIN connection type `NCCL_GIN_CONNECTION_RAIL`. Available since NCCL 2.29.7.
 
 ### ncclGinType_t[](#ncclgintype-t "Permalink to this heading")
 
@@ -234,13 +258,19 @@ NCCL_GIN_TYPE_GDAKI[](#c.ncclGinType_t.NCCL_GIN_TYPE_GDAKI "Permalink to this
 
 GPUDirect Async Kernel-Initiated (GDAKI) GIN type.
 
+NCCL_GIN_TYPE_GPI[](#c.ncclGinType_t.NCCL_GIN_TYPE_GPI "Permalink to this definition")  
+
+    
+
+GPU-Push Interface (GPI) GIN type. Requires SpectrumX - see SpectrumX documentation for details. Added as an experimental feature in NCCL 2.30.6.
+
 ### ncclGinConnectionType_t[](#ncclginconnectiontype-t "Permalink to this heading")
 
 type ncclGinConnectionType_t[](#c.ncclGinConnectionType_t "Permalink to this definition")  
 
     
 
-Specifies the type of GIN connection for device communicators. This enum controls whether GIN (GPU-Initiated Networking) resources should be allocated and what connection type to use. Used in [`ncclDevCommRequirements`](#c.ncclDevCommRequirements "ncclDevCommRequirements") when creating device communicators. Available since NCCL 2.29.4.
+Specifies the type of GIN connection for device communicators. This enum controls whether GIN (GPU-Initiated Networking) resources should be allocated and what connection type to use. Used in [`ncclDevCommRequirements`](#c.ncclDevCommRequirements "ncclDevCommRequirements") when creating device communicators. Available since NCCL 2.29.7.
 
 NCCL_GIN_CONNECTION_NONE[](#c.ncclGinConnectionType_t.NCCL_GIN_CONNECTION_NONE "Permalink to this definition")  
 

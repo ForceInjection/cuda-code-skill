@@ -109,7 +109,7 @@ Example:
     
     ncclCoopCta ctaCoop;
     ncclLsaBarrierSession<ncclCoopCta> bar { ctaCoop, devComm, ncclTeamLsa(devComm), devComm.lsaBarrier, blockIdx.x };
-    bar.sync(ctaCoop, cuda::memory_order_relaxed);
+    bar.sync(ctaCoop, cuda::memory_order_acquire);
     
     size_t srcOffset = [...];  // byte offset into symmetric send buffer on each peer
     size_t dstOffset = [...];  // byte offset into symmetric recv buffer on each peer
@@ -227,7 +227,7 @@ Example (e.g. broadcast phase of AllGather):
     
     ncclCoopCta ctaCoop;
     ncclLsaBarrierSession<ncclCoopCta> bar { ctaCoop, devComm, ncclTeamLsa(devComm), devComm.lsaBarrier, blockIdx.x };
-    bar.sync(ctaCoop, cuda::memory_order_relaxed);
+    bar.sync(ctaCoop, cuda::memory_order_acquire);
     
     size_t srcOffset = [...];  // byte offset into symmetric send buffer on each peer
     size_t dstOffset = [...];  // byte offset into symmetric recv buffer on each peer
@@ -322,7 +322,7 @@ Example (e.g. LSA AllReduce; see `test/perf/all_reduce.cu` for block-parallel ch
     
     ncclCoopCta ctaCoop;
     ncclLsaBarrierSession<ncclCoopCta> bar { ctaCoop, devComm, ncclTeamLsa(devComm), devComm.lsaBarrier, blockIdx.x };
-    bar.sync(ctaCoop, cuda::memory_order_relaxed);
+    bar.sync(ctaCoop, cuda::memory_order_acquire);
     
     size_t srcOffset = [...];  // byte offset into symmetric send buffer on each peer
     size_t dstOffset = [...];  // byte offset into symmetric recv buffer on each peer

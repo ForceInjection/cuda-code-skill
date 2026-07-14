@@ -38,9 +38,9 @@ GUIDE_DIR = {
 }
 
 SKILL_MD_CHECKS = [
-    ("PTX ISA", "ptx-docs", 405, "2.3MB"), ("CUDA Runtime API", "cuda-runtime-docs", 104, "1.2MB"),
-    ("CUDA Driver API", "cuda-driver-docs", 129, "1.2MB"), ("cuBLAS", "cublas-docs", 319, "2.9MB"),
-    ("CUDA Math API", "cuda-math-docs", 41, "528K"), ("NCCL", "nccl-docs", 34, "516K"),
+    ("PTX ISA", "ptx-docs", 679, "7.6MB"), ("CUDA Runtime API", "cuda-runtime-docs", 104, "1.1MB"),
+    ("CUDA Driver API", "cuda-driver-docs", 129, "1.2MB"), ("cuBLAS", "cublas-docs", 354, "3.0MB"),
+    ("CUDA Math API", "cuda-math-docs", 41, "528K"), ("NCCL", "nccl-docs", 57, "760K"),
 ]
 
 

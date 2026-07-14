@@ -72,7 +72,7 @@ The skills are organized as a multi-skill monorepo to separate concerns and allo
 skills/
 ├── cuda-knowledge/             # Knowledge base skill (formerly cuda_skill)
 │   ├── SKILL.md                # Defines how to search the documentation
-│   └── references/             # ~1040 markdown files (PTX, cuBLAS, Math API, etc.)
+│   └── references/             # ~1420 markdown files, CUDA Toolkit 13.3 (PTX ISA 9.3)
 ├── cuda-samples/               # Curated NVIDIA CUDA Samples index
 │   └── SKILL.md                # 50+ code patterns with GitHub permalinks and snippets
 ├── cuda-optimizer/             # The main orchestrator skill

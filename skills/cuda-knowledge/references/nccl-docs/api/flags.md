@@ -22,7 +22,7 @@ NCCL_WIN_COLL_SYMMETRIC[](#c.NCCL_WIN_COLL_SYMMETRIC "Permalink to this defin
 
 Register buffer into NCCL window, and users need to guarantee the offset to the buffer head address from all ranks must be equal when calling NCCL collective operations. It allows NCCL to operate buffer in a symmetric way and provide the best performance.
 
-NCCL_WIN_COLL_STRICT_ORDERING[](#c.NCCL_WIN_COLL_STRICT_ORDERING "Permalink to this definition")  
+NCCL_WIN_STRICT_ORDERING[](#c.NCCL_WIN_STRICT_ORDERING "Permalink to this definition")  
 
     
 

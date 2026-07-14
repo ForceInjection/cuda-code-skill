@@ -338,7 +338,27 @@ graphUsageMode[](#c.ncclConfig_t.graphUsageMode "Permalink to this definition
 
     
 
-Set the graph usage mode for the communicator. It support three possible values: 0 (no graphs), 1 (one graph) and 2 (either multiple graphs or mix of graph and non-graph). The default value is 2.
+Set the graph usage mode for the communicator. It support three possible values: 0 (no graphs), 1 (one graph) and 2 (either multiple graphs or mix of graph and non-graph). The default value is 2. If [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering) or [`graphStreamOrdering`](#c.ncclConfig_t.graphStreamOrdering "graphStreamOrdering") disables capture-time stream ordering (`0`), **graph mixing must be off** —use `graphUsageMode` `0` or `1` only; `graphUsageMode=2` must not be combined with ordering `0` (see [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering)).
+
+graphStreamOrdering[](#c.ncclConfig_t.graphStreamOrdering "Permalink to this definition")  
+
+    
+
+(since 2.30)
+
+Per-communicator override of [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering). `1` keeps NCCL’s default capture-time serialization of communication kernels. `0` disables it for this communicator—kernels are placed on the capture stream and the application must guarantee correct ordering (see [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering)).
+
+Defaults to `NCCL_CONFIG_UNDEF_INT` (inherits [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering)). `0` or `1` overrides the env var for this communicator.
+
+`graphStreamOrdering=0` requires `graphUsageMode` `0` or `1` (mixing **off**). Combining it with `graphUsageMode=2` is **not supported** ; see [NCCL_GRAPH_STREAM_ORDERING](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html#nccl-graph-stream-ordering).
+
+**Mixed values on one GPU:** A communicator set to `1` still receives NCCL’s internal serialization for its own kernels, but NCCL does **not** insert cross-communicator ordering with a peer set to `0`—its kernels may overlap in situations NCCL would have serialized. Use `0` only when the application guarantees ordering of **all** NCCL communication kernels that may run concurrently on the GPU.
+
+maxP2pPeers[](#c.ncclConfig_t.maxP2pPeers "Permalink to this definition")  
+
+    
+
+Set the maximum number of peers any rank will concurrently communicate with using P2P communication. Setting this value will influence all send/recv and send/recv-based collectives (all-to-all, scatter, gather). Values less than one or greater than the number of ranks will default to the number of ranks in the communicator.
 
 ## ncclSimInfo_t[](#ncclsiminfo-t "Permalink to this heading")
 

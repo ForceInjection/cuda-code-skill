@@ -23,7 +23,7 @@ Constructor by default.
 
 Emtpy default constructor, result is uninitialized.
 
-__host__ __device__ inline explicit __nv_bfloat16(const __half f)
+__host__ __device__ __tile__ inline explicit __nv_bfloat16(const __half f)
 
 
 
@@ -35,61 +35,61 @@ __host__ __device__ inline constexpr __nv_bfloat16(const __nv_bfloat16_raw &hr)�
 
 Constructor from `__nv_bfloat16_raw`.
 
-__host__ __device__ inline __nv_bfloat16(const double f)
+__host__ __device__ __tile__ inline __nv_bfloat16(const double f)
 
 
 
 Construct `__nv_bfloat16` from `double` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(const float f)
+__host__ __device__ __tile__ inline __nv_bfloat16(const float f)
 
 
 
 Construct `__nv_bfloat16` from `float` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(const long val)
+__host__ __device__ __tile__ inline __nv_bfloat16(const long val)
 
 
 
 Construct `__nv_bfloat16` from `long` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(const unsigned long val)
+__host__ __device__ __tile__ inline __nv_bfloat16(const unsigned long val)
 
 
 
 Construct `__nv_bfloat16` from `unsigned` `long` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(int val)
+__host__ __device__ __tile__ inline __nv_bfloat16(int val)
 
 
 
 Construct `__nv_bfloat16` from `int` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(long long val)
+__host__ __device__ __tile__ inline __nv_bfloat16(long long val)
 
 
 
 Construct `__nv_bfloat16` from `long` `long` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(short val)
+__host__ __device__ __tile__ inline __nv_bfloat16(short val)
 
 
 
 Construct `__nv_bfloat16` from `short` integer input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(unsigned int val)
+__host__ __device__ __tile__ inline __nv_bfloat16(unsigned int val)
 
 
 
 Construct `__nv_bfloat16` from `unsigned` `int` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(unsigned long long val)
+__host__ __device__ __tile__ inline __nv_bfloat16(unsigned long long val)
 
 
 
 Construct `__nv_bfloat16` from `unsigned` `long` `long` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ inline __nv_bfloat16(unsigned short val)
+__host__ __device__ __tile__ inline __nv_bfloat16(unsigned short val)
 
 
 
@@ -107,7 +107,7 @@ __host__ __device__ operator __nv_bfloat16_raw() volatile const
 
 Type cast to `__nv_bfloat16_raw` operator with `volatile` input.
 
-__host__ __device__ inline operator bool() const
+__host__ __device__ __tile__ inline operator bool() const
 
 
 
@@ -115,7 +115,7 @@ Conversion operator to `bool` data type.
 
 +0 and -0 inputs convert to `false`. Non-zero inputs convert to `true`.
 
-__host__ __device__ operator char() const
+__host__ __device__ __tile__ inline operator char() const
 
 
 
@@ -125,13 +125,13 @@ Using round-toward-zero rounding mode.
 
 Detects signedness of the `char` type and proceeds accordingly, see further details in signed and unsigned char operators.
 
-__host__ __device__ operator float() const
+__host__ __device__ __tile__ operator float() const
 
 
 
 Type cast to `float` operator.
 
-__host__ __device__ operator int() const
+__host__ __device__ __tile__ operator int() const
 
 
 
@@ -141,7 +141,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162int_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator long() const
+__host__ __device__ __tile__ inline operator long() const
 
 
 
@@ -149,7 +149,7 @@ Conversion operator to `long` data type.
 
 Using round-toward-zero rounding mode.
 
-__host__ __device__ operator long long() const
+__host__ __device__ __tile__ operator long long() const
 
 
 
@@ -159,7 +159,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162ll_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator short() const
+__host__ __device__ __tile__ operator short() const
 
 
 
@@ -169,7 +169,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162short_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator signed char() const
+__host__ __device__ __tile__ operator signed char() const
 
 
 
@@ -179,7 +179,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162char_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator unsigned char() const
+__host__ __device__ __tile__ operator unsigned char() const
 
 
 
@@ -189,7 +189,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162uchar_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator unsigned int() const
+__host__ __device__ __tile__ operator unsigned int() const
 
 
 
@@ -199,7 +199,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162uint_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator unsigned long() const
+__host__ __device__ __tile__ inline operator unsigned long() const
 
 
 
@@ -207,7 +207,7 @@ Conversion operator to `unsigned` `long` data type.
 
 Using round-toward-zero rounding mode.
 
-__host__ __device__ operator unsigned long long() const
+__host__ __device__ __tile__ operator unsigned long long() const
 
 
 
@@ -217,7 +217,7 @@ Using round-toward-zero rounding mode.
 
 See __bfloat162ull_rz(__nv_bfloat16) for further details
 
-__host__ __device__ operator unsigned short() const
+__host__ __device__ __tile__ operator unsigned short() const
 
 
 
@@ -239,13 +239,13 @@ __host__ __device__ volatile __nv_bfloat16 &operator=(const __nv_bfloat16_raw &h
 
 Assignment operator from `__nv_bfloat16_raw` to `volatile` `__nv_bfloat16`.
 
-__host__ __device__ __nv_bfloat16 &operator=(const double f)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(const double f)
 
 
 
 Type cast to `__nv_bfloat16` assignment operator from `double` input using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(const float f)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(const float f)
 
 
 
@@ -257,37 +257,37 @@ __host__ __device__ volatile __nv_bfloat16 &operator=(volatile const __nv_bfloat
 
 Assignment operator from `volatile` `__nv_bfloat16_raw` to `volatile` `__nv_bfloat16`.
 
-__host__ __device__ __nv_bfloat16 &operator=(int val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(int val)
 
 
 
 Type cast from `int` assignment operator, using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(long long val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(long long val)
 
 
 
 Type cast from `long` `long` assignment operator, using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(short val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(short val)
 
 
 
 Type cast from `short` assignment operator, using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(unsigned int val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(unsigned int val)
 
 
 
 Type cast from `unsigned` `int` assignment operator, using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(unsigned long long val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(unsigned long long val)
 
 
 
 Type cast from `unsigned` `long` `long` assignment operator, using default round-to-nearest-even rounding mode.
 
-__host__ __device__ __nv_bfloat16 &operator=(unsigned short val)
+__host__ __device__ __tile__ __nv_bfloat16 &operator=(unsigned short val)
 
 
 

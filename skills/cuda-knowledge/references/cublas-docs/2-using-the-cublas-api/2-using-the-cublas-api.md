@@ -44,7 +44,7 @@ The non-deterministic behavior of multi-stream execution is due to library optim
   * set a debug environment variable `CUBLAS_WORKSPACE_CONFIG` to `:16:8` (may limit overall performance) or `:4096:8` (will increase library footprint in GPU memory by approximately 24MiB).
 
 
-The non-deterministic behavior of [fixed-point](#fixed-point) emulation is due to the large workspace memory requirements (see [Fixed-Point Workspace Requirements](#id2) for details). This requires dynamically allocating memory with cudaMallocAsync() and allocation failures result in fallbacks to non-emulated routines. To avoid this effect, users can provide workspace via [cublasSetWorkspace()](#cublassetworkspace) to meet fixed-point emulation workspace requirements.
+The non-deterministic behavior of [fixed-point](#fixed-point) emulation is due to its workspace memory requirements, which can exceed the per-handle workspace (see [Fixed-Point Workspace Requirements](#id2) for details). When the per-handle workspace is insufficient, the library dynamically allocates additional memory with cudaMallocAsync(), and allocation failures result in fallbacks to non-emulated routines. To avoid this effect, users can provide workspace via [cublasSetWorkspace()](#cublassetworkspace) to meet fixed-point emulation workspace requirements.
 
 Any of those settings will allow for deterministic behavior even with multiple concurrent streams sharing a single cuBLAS handle.
 
@@ -168,6 +168,10 @@ For input coefficients (such as `alpha`, `beta`) behavior depends on the pointer
 Note
 
 When captured in CUDA Graph stream capture, cuBLAS routines can create [memory nodes](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#graph-memory-nodes) through the use of stream-ordered allocation APIs, `cudaMallocAsync` and `cudaFreeAsync`. However, as there is currently no support for memory nodes in [child graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#node-types) or graphs launched [from the device](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-graph-launch), attempts to capture cuBLAS routines in such scenarios may fail. To avoid this issue, use the [cublasSetWorkspace()](#cublassetworkspace) function to provide user-owned workspace memory.
+
+Note
+
+`cudaMallocAsync` is not supported under CUDA in Graphics (CiG) contexts. cuBLAS routines that rely on `cudaMallocAsync` will return `CUBLAS_STATUS_INVALID_VALUE` in CiG contexts. Use [cublasSetWorkspace()](#cublassetworkspace) to provide user-owned workspace memory instead.
 
 ###  2.1.13. 64-bit Integer Interface 
 

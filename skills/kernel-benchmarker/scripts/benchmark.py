@@ -363,7 +363,7 @@ def _compile_and_load(cu_file: str, arch: str, force_recompile: bool = False,
     # Use the low-level ctypes approach to load PTX
     import ctypes
     libnames = ("libcuda.so", "libcuda.so.1", "/usr/local/cuda/lib64/libcuda.so",
-                "/usr/local/cuda-12.8/lib64/libcuda.so", "/usr/local/cuda-12/lib64/libcuda.so")
+                "/usr/local/cuda-13/lib64/libcuda.so", "/usr/local/cuda-12/lib64/libcuda.so")
     cuda = None
     for name in libnames:
         try:

@@ -77,4 +77,4 @@ void *ncclGetLsaMultimemPointer(ncclWindow_t w, size_t offset, ncclDevComm const
 
     
 
-Returns a multicast memory pointer associated with the window _w_ and device communicator _devComm_. _offset_ is byte-based. Availability of multicast memory is hardware-dependent.
+Returns a multicast memory pointer associated with the window _w_ and device communicator _devComm_. _offset_ is byte-based. Availability of multicast memory is hardware-dependent. Currently unsupported for memory regions that contain host-backed segments (CU_MEM_LOCATION_TYPE_HOST_NUMA).

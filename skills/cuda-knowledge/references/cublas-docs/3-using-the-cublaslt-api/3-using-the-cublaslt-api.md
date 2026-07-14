@@ -105,7 +105,7 @@ Unless otherwise stated, FP8 refers to both `CUDA_R_8F_E4M3` and `CUDA_R_8F_E5M2
 
 With the Blackwell GPUs (compute capability 10.0 and above), cuBLAS adds support for 4-bit floating data type (FP4) `CUDA_R_4F_E2M1`. The E2 and M1 indicate a 2-bit exponent and a 1-bit mantissa respectively. For more details, see [__nv_fp4_e2m1](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/struct____nv__fp4__e2m1.html).
 
-In order to maintain accuracy, data in narrow precisions needs to be scaled or dequantized before and potentially quantized after computations. cuBLAS provides several modes how the scaling factors are applied, defined in [cublasLtMatmulMatrixScale_t](#cublasltmatmulmatrixscale-t) and configured via the `CUBLASLT_MATMUL_DESC_X_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, `D_OUT`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)). The scaling modes overview is given in the next table, and more details are available in the subsequent sections.
+In order to maintain accuracy, data in narrow precisions needs to be scaled or dequantized before and potentially quantized after computations. cuBLAS provides several modes how the scaling factors are applied, defined in [cublasLtMatmulMatrixScale_t](#cublasltmatmulmatrixscale-t) and configured via the `CUBLASLT_MATMUL_DESC_{X}_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, `D_OUT`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)). The scaling modes overview is given in the next table, and more details are available in the subsequent sections.
 
 Scaling Mode Support Overview Mode | Supported compute capabilities | Tensor values data type | Scaling factors data type | Scaling factor layout  
 ---|---|---|---|---  
@@ -149,7 +149,7 @@ Only Tensorwide scaling is supported when `cublasLtBatchMode_t` of any matrix is
 
 ####  3.1.4.1. Tensorwide Scaling For FP8 Data Types 
 
-Tensorwide scaling is enabled when `CUBLASLT_MATMUL_DESC_X_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) for all FP8-precision tensors are set to `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F` (this is the default value for FP8 tensors). In such case, the matmul operation in cuBLAS is defined in the following way (assuming, for exposition, that all tensors are using an FP8 precision):
+Tensorwide scaling is enabled when `CUBLASLT_MATMUL_DESC_{X}_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) for all FP8-precision tensors are set to `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F` (this is the default value for FP8 tensors). In such case, the matmul operation in cuBLAS is defined in the following way (assuming, for exposition, that all tensors are using an FP8 precision):
 
 \\[D = scale_D \cdot (\alpha \cdot scale_A \cdot scale_B \cdot \text{op}(A) \text{op}(B) + \beta \cdot scale_C \cdot C).\\]
 
@@ -167,7 +167,7 @@ As indicated in equation above, bias is applied before calculating \\(Aux_{temp}
 
 ####  3.1.4.2. Experimental: Per-batch Tensorwide Scaling For FP8 Data Types 
 
-Per-batch Tensorwide scaling is enabled when `CUBLASLT_MATMUL_DESC_X_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) for all FP8-precision tensors are set to `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F`.
+Per-batch Tensorwide scaling is enabled when `CUBLASLT_MATMUL_DESC_{X}_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `D`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) for all FP8-precision tensors are set to `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F`.
 
 Per-batch Tensorwide scaling is a variant of tensorwide scaling except that each matrix in the batch has its own scaling factor.
 
@@ -193,7 +193,7 @@ When using this scaling mode, the \\(scale_A\\) and \\(scale_B\\) must be vector
 
 1D block scaling aims to overcome limitations of having a single scalar to scale a whole tensor. It is described in more details in the [OCP MXFP](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf) specification, so we give just a brief overview here. Block scaling means that elements within the same 16- or 32-element block of adjacent values are assigned a shared scaling factor.
 
-Currently, block scaling is supported for FP8-precision and FP4-precision tensors and mixing precisions is not supported. To enable block scaling, the `CUBLASLT_MATMUL_DESC_X_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `DOUT`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) must be set to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0` for all FP8-precision tensors or to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3` for all FP4-precision tensors.
+Currently, block scaling is supported for FP8-precision and FP4-precision tensors and mixing precisions is not supported. To enable block scaling, the `CUBLASLT_MATMUL_DESC_{X}_SCALE_MODE` attributes (here `X` stands for `A`, `B`, `C`, `DOUT`, or `EPILOGUE_AUX`; see [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) must be set to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0` for all FP8-precision tensors or to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3` for all FP4-precision tensors.
 
 With block scaling, the matmul operation in cuBLAS is defined in the following way (assuming, for exposition, that all tensors are using a narrow precision). We loosely follow the OCP MXFP specification notation.
 
@@ -321,7 +321,7 @@ Note that when tensor dimensions are not multiples of the tile size above, it is
 
 These two scaling modes apply principles of the scaling approach described [16/32-Element 1D Block Scaling for FP8 and FP4 Data Types](#d-block-scaling-for-fp8-and-fp4-data-types) to the Hopper GPU architecture. However, here the scaling data type is `CUDA_R_32F`, and different scaling modes can be used for \\(A\\) and \\(B\\), and the only supported precisions for \\(D\\) are `CUDA_R_16F`, `CUDA_R_16BF`, and `CUDA_R_32F`.
 
-To enable this scaling mode, the `CUBLASLT_MATMUL_DESC_X_SCALE_MODE` attributes (here `X` stands for `A` or `B`), must be set to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F` or `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F`, while all the other scaling modes must not be modified. The following table shows supported combinations:
+To enable this scaling mode, the `CUBLASLT_MATMUL_DESC_{X}_SCALE_MODE` attributes (here `X` stands for `A` or `B`), must be set to `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F` or `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F`, while all the other scaling modes must not be modified. The following table shows supported combinations:
 
 CUBLASLT_MATMUL_DESC_A_SCALE_MODE | CUBLASLT_MATMUL_DESC_B_SCALE_MODE | Supported?  
 ---|---|---  
@@ -450,8 +450,8 @@ Value | Description
 `CUBLASLT_EPILOGUE_DRELU_BGRAD = CUBLASLT_EPILOGUE_DRELU | 16` | Apply independently ReLu and Bias gradient to matmul output. Store ReLu gradient in the output matrix, and Bias gradient in the bias buffer (see `CUBLASLT_MATMUL_DESC_BIAS_POINTER`). This epilogue mode requires an extra input, see `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
 `CUBLASLT_EPILOGUE_GELU = 32` | Apply GELU point-wise transform to the results (`x := GELU(x)`).  
 `CUBLASLT_EPILOGUE_GELU_AUX = CUBLASLT_EPILOGUE_GELU | 128` | Apply GELU point-wise transform to the results (`x := GELU(x)`). This epilogue mode outputs GELU input as a separate matrix (useful for training). See `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
-`CUBLASLT_EPILOGUE_GELU_BIAS = CUBLASLT_EPILOGUE_GELU = CUBLASLT_EPILOGUE_BIAS` | Apply Bias and then GELU transform [5](#gelu).  
-`CUBLASLT_EPILOGUE_GELU_AUX_BIAS = CUBLASLT_EPILOGUE_GELU_AUX = CUBLASLT_EPILOGUE_BIAS` | Apply Bias and then GELU transform [5](#gelu). This epilogue mode outputs GELU input as a separate matrix (useful for training). See `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
+`CUBLASLT_EPILOGUE_GELU_BIAS = CUBLASLT_EPILOGUE_GELU | CUBLASLT_EPILOGUE_BIAS` | Apply Bias and then GELU transform [5](#gelu).  
+`CUBLASLT_EPILOGUE_GELU_AUX_BIAS = CUBLASLT_EPILOGUE_GELU_AUX | CUBLASLT_EPILOGUE_BIAS` | Apply Bias and then GELU transform [5](#gelu). This epilogue mode outputs GELU input as a separate matrix (useful for training). See `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
 `CUBLASLT_EPILOGUE_DGELU = 64 | 128` | Apply GELU gradient to matmul output. Store GELU gradient in the output matrix. This epilogue mode requires an extra input, see `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
 `CUBLASLT_EPILOGUE_DGELU_BGRAD = CUBLASLT_EPILOGUE_DGELU | 16` | Apply independently GELU and Bias gradient to matmul output. Store GELU gradient in the output matrix, and Bias gradient in the bias buffer (see `CUBLASLT_MATMUL_DESC_BIAS_POINTER`). This epilogue mode requires an extra input, see `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
 `CUBLASLT_EPILOGUE_BGRADA = 256` | Apply Bias gradient to the input matrix A. The bias size corresponds to the number of rows of the matrix D. The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see `CUBLASLT_MATMUL_DESC_BIAS_POINTER` of [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t).  
@@ -466,7 +466,7 @@ GELU (Gaussian Error Linear Unit) is approximated by: \\({0.5}x\left( 1 + \text{
 
 Note
 
-Only `CUBLASLT_EPILOGUE_DEFAULT` is supported when `cublasLtBatchMode_t` of any matrix is set to `CUBLASLT_BATCH_MODE_POINTER_ARRAY` or `CUBLASLT_BATCH_MODE_GROUPED`.
+Only `CUBLASLT_EPILOGUE_DEFAULT` is supported when `cublasLtBatchMode_t` of any matrix is set to `CUBLASLT_BATCH_MODE_POINTER_ARRAY`. Only `CUBLASLT_EPILOGUE_DEFAULT` and `CUBLASLT_EPILOGUE_BIAS` are supported when `cublasLtBatchMode_t` of any matrix is set to `CUBLASLT_BATCH_MODE_GROUPED`.
 
 ###  3.3.3. cublasLtHandle_t 
 
@@ -503,7 +503,7 @@ Value | Description | Data Type
 `CUBLASLT_ALGO_CAP_CTA_SWIZZLING_SUPPORT` | Support for CTA-swizzling. Boolean (0 or 1) to express if CTA-swizzling implementation is supported. 0 means no support, and 1 means supported value of 1; other values are reserved. See also `CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING` of [cublasLtMatmulAlgoConfigAttributes_t](#cublasltmatmulalgoconfigattributes-t). | `uint32_t`  
 `CUBLASLT_ALGO_CAP_STRIDED_BATCH_SUPPORT` | Support strided batch. 0 means no support, supported otherwise. | `int32_t`  
 `CUBLASLT_ALGO_CAP_POINTER_ARRAY_BATCH_SUPPORT` | Support pointer array batch. 0 means no support, supported otherwise. | `int32_t`  
-`CUBLASLT_ALGO_CAP_POINTER_ARRAY_GROUPED_SUPPORT` | Experimental: Support pointer array grouped. 0 means no support, supported otherwise. See `CUBLASLT_BATCH_MODE_GROUPED` of [cublasLtBatchMode_t](#cublasltbatchmode-t). | `int32_t`  
+`CUBLASLT_ALGO_CAP_POINTER_ARRAY_GROUPED_SUPPORT` | Experimental: Support pointer array grouped batch. 0 means no support, supported otherwise. See `CUBLASLT_BATCH_MODE_GROUPED` of [cublasLtBatchMode_t](#cublasltbatchmode-t). | `int32_t`  
 `CUBLASLT_ALGO_CAP_OUT_OF_PLACE_RESULT_SUPPORT` | Support results out of place (D != C in D = alpha.A.B + beta.C). 0 means no support, supported otherwise. | `int32_t`  
 `CUBLASLT_ALGO_CAP_UPLO_SUPPORT` | Syrk (symmetric rank k update)/herk (Hermitian rank k update) support (on top of regular gemm). 0 means no support, supported otherwise. | `int32_t`  
 `CUBLASLT_ALGO_CAP_TILE_IDS` | The tile ids possible to use. See [cublasLtMatmulTile_t](#cublasltmatmultile-t). If no tile ids are supported then use `CUBLASLT_MATMUL_TILE_UNDEFINED`. Use [cublasLtMatmulAlgoCapGetAttribute()](#cublasltmatmulalgocapgetattribute) with `sizeInBytes = 0` to query the actual count. | `uint32_t[]`  
@@ -563,7 +563,7 @@ Value | Description | Data Type
   * Output vector with length that matches the number of columns of matrix D when one of the following epilogues is used: `CUBLASLT_EPILOGUE_BGRADB`.
 
 Bias vector elements are the same type as `alpha` and `beta` (see `CUBLASLT_MATMUL_DESC_SCALE_TYPE` in this table) when matrix D datatype is `CUDA_R_8I` and same as matrix D datatype otherwise. See the datatypes table under [cublasLtMatmul()](#cublasltmatmul) for detailed mapping. Default value is: NULL. | `void *` / `const void *`  
-`CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE` | Stride (in elements) to the next bias or bias gradient vector for strided batch operations. The default value is 0. | `int64_t`  
+`CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE` | Stride (in elements) to the next bias or bias gradient vector for strided batch operations. If cublasLtBatchMode_t of any matrix is set to `CUBLASLT_BATCH_MODE_GROUPED` and `CUBLASLT_MATMUL_DESC_EPILOGUE` includes `CUBLASLT_EPILOGUE_BIAS` then `CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE` must be set to 1. The default value is 0. | `int64_t`  
 `CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER` |  Pointer for epilogue auxiliary buffer.
 
   * Output vector for ReLu bit-mask in forward pass when `CUBLASLT_EPILOGUE_RELU_AUX` or `CUBLASLT_EPILOGUE_RELU_AUX_BIAS` epilogue is used.
@@ -622,6 +622,18 @@ Default value: -1 | `int32_t` ([cudaDataType_t](#cudadatatype-t))
 `CUBLASLT_MATMUL_DESC_EMULATION_DESCRIPTOR` | Emulation descriptor to configure floating point emulation parameters. Default value: NULL. | `int32_t`  
 `CUBLASLT_MATMUL_DESC_ALPHA_BATCH_STRIDE` | Experimental: Batch stride for alpha. Applicable when matrix D’s `CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT` is greater than 1. Supported values are 0 and 1. Default value is 0. When the value is set to 1, the parameter `alpha` of [cublasLtMatmul()](#cublasltmatmul) must contain a device array of pointers of length `CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT`. This setting is currently only supported if cublasLtBatchMode_t of all matrices is set to `CUBLASLT_BATCH_MODE_GROUPED` and `CUBLASLT_MATMUL_DESC_POINTER_MODE` is set to `CUBLASLT_POINTER_MODE_DEVICE`. | `int64_t`  
 `CUBLASLT_MATMUL_DESC_BETA_BATCH_STRIDE` | Experimental: Batch stride for beta. Applicable when matrix D’s `CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT` is greater than 1. Supported values are 0 and 1. Default value is 0. When the value is set to 1, the parameter `beta` of [cublasLtMatmul()](#cublasltmatmul) must contain a device array of pointers of length `CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT`. This setting is currently only supported if cublasLtBatchMode_t of all matrices is set to `CUBLASLT_BATCH_MODE_GROUPED` and `CUBLASLT_MATMUL_DESC_POINTER_MODE` is set to `CUBLASLT_POINTER_MODE_DEVICE`. | `int64_t`  
+  
+Note
+
+The batch mode of a matmul operation is inferred from the batch modes of matrix descriptors, which must all be the same. The following table describes rules for operands that do not have a descriptor, like scaling factors. The expected parameter value depends on the batch mode of the matmul operation and the operand stride configured via a `CUBLASLT_MATMUL_DESC_{ATTR}_BATCH_STRIDE` attribute.
+
+Matmul batch mode | Operand stride | Expected parameter value | Usage scenario  
+---|---|---|---  
+Strided | `0` | Pointer to a buffer for a single batch element | Reuse the value across the batch  
+Non-zero | Pointer to a buffer with distinct values for each batch element | Use distinct values for each batch element  
+Pointer array or grouped | `0` | Pointer to a for a single batch element | Reuse the value across the batch  
+`1` | Pointer to a device array of pointers to buffers, one for each batch element | Use distinct values for each batch element  
+Other values | Not supported | None  
   
 ###  3.3.10. cublasLtMatmulHeuristicResult_t 
 
@@ -913,6 +925,7 @@ Value | Description
 `CUBLASLT_MATMUL_MATRIX_SCALE_OUTER_VEC_32F` | Scaling factors are vectors of CUDA_R_32F values. This mode is only applicable to matrices A and B, in which case the vectors are expected to have M and N elements respectively, and each (i, j)-th element of product of A and B is multiplied by i-th element of A scale and j-th element of B scale.  
 `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F` | Scaling factors are tensors that contain a dedicated CUDA_R_32F scaling factor for each 128-element block in the innermost dimension of the corresponding data tensor.  
 `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F` | Scaling factors are tensors that contain a dedicated CUDA_R_32F scaling factor for each 128x128-element block in the the corresponding data tensor.  
+`CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F` | Scaling factors are single-precision scalars applied successively to each matrix in a batch. This mode is only applicable to matrices A and B, in which case the scales are expected to have BATCH_COUNT elements.  
   
 ###  3.3.28. cublasLtBatchMode_t 
 
@@ -1427,36 +1440,51 @@ Experimental: To use [cublasLtMatmul()](#cublasltmatmul) with grouped matrices, 
 
   * All matrix dimensions must meet the optimal requirements listed in [Tensor Core Usage](#tensor-core-usage) (i.e. pointers and matrix dimension must support 16-byte alignment).
 
-  * GPU with one of the following compute capabilities: 10.x, 11.0.
+  * GPU with one of the following compute capabilities: 9.0, 10.x, 11.0.
 
   * The batch mode of all matrices must be `CUBLASLT_BATCH_MODE_GROUPED`.
 
-  * The order type of all matrices must be `CUBLASLT_ORDER_COL`.
-
-  * The scale mode of matrices `A`, `B` must be `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F`, `CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0` or `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F` (for FP8 tensors).
+  * The pointer mode must be `CUBLASLT_POINTER_MODE_HOST` or `CUBLASLT_POINTER_MODE_DEVICE`.
 
   * The scale mode of matrices `C` and `D` must be `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F`.
 
-  * The epilogue must be `CUBLASLT_EPILOGUE_DEFAULT`.
+  * On GPUs with compute capability 9.0:
 
-  * The pointer mode must be `CUBLASLT_POINTER_MODE_HOST` or `CUBLASLT_POINTER_MODE_DEVICE`.
+>     * The scale mode of matrices `A`, `B` must be `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F`, `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F`, `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F`, or `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F` (for FP8 tensors)
+> 
+>     * The epilogue must be `CUBLASLT_EPILOGUE_DEFAULT`
+
+  * On GPUs with compute capability 10.x and 11.0:
+
+>     * The scale mode of matrices `A`, `B` must be `CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F`, `CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0`, `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F` (for FP8 tensors), or `CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3` (for FP4 tensors)
+> 
+>     * The epilogue must be `CUBLASLT_EPILOGUE_DEFAULT` or `CUBLASLT_EPILOGUE_BIAS`
 
 
-Table 6. When A, B, C, and D are Regular Column-major Matrices AType | BType | CType | DType  
----|---|---|---  
-`CUDA_R_8F_E4M3` | `CUDA_R_8F_E4M3` | `CUDA_R_16BF` | `CUDA_R_16BF`  
-`CUDA_R_16F` | `CUDA_R_16F`  
-`CUDA_R_32F` | `CUDA_R_32F`  
-`CUDA_R_8F_E5M2` | `CUDA_R_16BF` | `CUDA_R_16BF`  
-`CUDA_R_16F` | `CUDA_R_16F`  
-`CUDA_R_32F` | `CUDA_R_32F`  
-`CUDA_R_8F_E5M2` | `CUDA_R_8F_E4M3` | `CUDA_R_16BF` | `CUDA_R_16BF`  
-`CUDA_R_16F` | `CUDA_R_16F`  
-`CUDA_R_32F` | `CUDA_R_32F`  
-`CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF`  
-`CUDA_R_32F` | `CUDA_R_32F`  
-`CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F`  
-`CUDA_R_32F` | `CUDA_R_32F`  
+Table 6. When A, B, C, and D are Regular Column- or Row-major Matrices AType | BType | CType | DType | Bias Type  
+---|---|---|---|---  
+`CUDA_R_8F_E4M3` | `CUDA_R_8F_E4M3` | `CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_32F` | `CUDA_R_32F` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E5M2` | `CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E5M2` [8](#sc) | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_8F_E5M2` [8](#sc) | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_32F` | `CUDA_R_32F` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E5M2` | `CUDA_R_8F_E4M3` | `CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_8F_E5M2` [8](#sc) | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_8F_E4M3` [8](#sc) | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_8F_E5M2` [8](#sc) | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_32F` | `CUDA_R_32F` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_4F_E2M1` | `CUDA_R_4F_E2M1` | `CUDA_R_16BF` | `CUDA_R_16BF` | `CUDA_R_16BF` [6](#epi)  
+`CUDA_R_16F` | `CUDA_R_16F` | `CUDA_R_16F` [6](#epi)  
+`CUDA_R_32F` | `CUDA_R_32F` | `CUDA_R_16BF` [6](#epi)  
   
 Note
 
@@ -1464,17 +1492,17 @@ Because the shape information for the matrices is only available on the GPU (see
 
 **NOTES:**
 
-6([1](#id28),[2](#id29),[3](#id30),[4](#id31),[5](#id32),[6](#id33),[7](#id34),[8](#id40),[9](#id44),[10](#id48),[11](#id50),[12](#id51),[13](#id53),[14](#id54),[15](#id55),[16](#id57),[17](#id59),[18](#id60),[19](#id62),[20](#id64),[21](#id65),[22](#id66),[23](#id68),[24](#id70),[25](#id71),[26](#id73),[27](#id75),[28](#id76),[29](#id77),[30](#id78),[31](#id79),[32](#id80),[33](#id81))
+6([1](#id28),[2](#id29),[3](#id30),[4](#id31),[5](#id32),[6](#id33),[7](#id34),[8](#id40),[9](#id44),[10](#id48),[11](#id50),[12](#id51),[13](#id53),[14](#id54),[15](#id55),[16](#id57),[17](#id59),[18](#id60),[19](#id62),[20](#id64),[21](#id65),[22](#id66),[23](#id68),[24](#id70),[25](#id71),[26](#id73),[27](#id75),[28](#id76),[29](#id77),[30](#id78),[31](#id79),[32](#id80),[33](#id81),[34](#id88),[35](#id90),[36](#id91),[37](#id93),[38](#id94),[39](#id95),[40](#id97),[41](#id99),[42](#id100),[43](#id102),[44](#id104),[45](#id105),[46](#id106),[47](#id108),[48](#id110),[49](#id111),[50](#id113),[51](#id115),[52](#id116),[53](#id117),[54](#id118),[55](#id119))
     
 
-ReLU, dReLu, GELU, dGELU and Bias epilogue modes (see `CUBLASLT_MATMUL_DESC_EPILOGUE` in [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) are not supported when D matrix memory order is defined as `CUBLASLT_ORDER_ROW`. For best performance when using the bias vector, specify zero beta and set pointer mode to `CUBLASLT_POINTER_MODE_HOST`.
+Epilogue modes that combine ReLU, dReLu, GELU, or dGELU with Bias (see `CUBLASLT_MATMUL_DESC_EPILOGUE` in [cublasLtMatmulDescAttributes_t](#cublasltmatmuldescattributes-t)) are not supported when D matrix memory order is defined as `CUBLASLT_ORDER_ROW`. For best performance when using the bias vector, specify zero beta and set pointer mode to `CUBLASLT_POINTER_MODE_HOST`.
 
 7([1](#id35),[2](#id36),[3](#id37),[4](#id38),[5](#id39),[6](#id41),[7](#id42),[8](#id43),[9](#id45),[10](#id46),[11](#id47),[12](#id82),[13](#id83),[14](#id84),[15](#id85),[16](#id86),[17](#id87))
     
 
 Use of `CUBLAS_ORDER_ROW` together with `CUBLAS_OP_C` (Hermitian operator) is not supported unless all of A, B, C, and D matrices use the `CUBLAS_ORDER_ROW` ordering.
 
-8([1](#id49),[2](#id52),[3](#id56),[4](#id58),[5](#id61),[6](#id63),[7](#id67),[8](#id69),[9](#id72),[10](#id74))
+8([1](#id49),[2](#id52),[3](#id56),[4](#id58),[5](#id61),[6](#id63),[7](#id67),[8](#id69),[9](#id72),[10](#id74),[11](#id89),[12](#id92),[13](#id96),[14](#id98),[15](#id101),[16](#id103),[17](#id107),[18](#id109),[19](#id112),[20](#id114))
     
 
 FP8 DType is not supported when scaling modes are one of `CUBLASLT_MATMUL_MATRIX_SCALE_OUTER_VEC_32F`, `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F`, and `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F`.
@@ -1596,7 +1624,52 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.20. cublasLtMatmulAlgoConfigGetAttribute() 
+###  3.4.20. cublasLtMatmulAlgoCheckForStream() 
+    
+    
+    cublasStatus_t cublasLtMatmulAlgoCheckForStream(
+          cublasLtHandle_t lightHandle,
+          cublasLtMatmulDesc_t operationDesc,
+          cublasLtMatrixLayout_t Adesc,
+          cublasLtMatrixLayout_t Bdesc,
+          cublasLtMatrixLayout_t Cdesc,
+          cublasLtMatrixLayout_t Ddesc,
+          const cublasLtMatmulAlgo_t *algo,
+          cublasLtMatmulHeuristicResult_t *result,
+          cudaStream_t stream);
+    
+
+This function performs the correctness check on the matrix multiply algorithm descriptor for the matrix multiply operation [cublasLtMatmul()](#cublasltmatmul) function with the given input matrices A, B and C, and the output matrix D. It checks whether the descriptor is supported on the current device and execution context (specified by the stream), and returns the result containing the required workspace and the calculated wave count.
+
+Unlike [cublasLtMatmulAlgoCheck()](#cublasltmatmulalgocheck), this variant takes a CUDA stream into account when evaluating algorithm compatibility. If the stream is associated with a Green Context (a CUDA execution context that provides access to a subset of GPU resources), the check reflects the SM count and resource constraints of that context, not the full device. For more information see [Execution Context Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXECUTION__CONTEXT.html#group__CUDART__EXECUTION__CONTEXT).
+
+Note
+
+`CUBLAS_STATUS_SUCCESS` doesn’t fully guarantee that the algo will run. The algo will fail if, for example, the buffers are not correctly aligned. However, if [cublasLtMatmulAlgoCheckForStream()](#cublasltmatmulalgocheckforstream) fails, the algo will not run.
+
+**Parameters** :
+
+Parameter | Memory | Input / Output | Description  
+---|---|---|---  
+`lightHandle` |  | Input | Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See [cublasLtHandle_t](#cublaslthandle-t).  
+`operationDesc` |  | Input | Handle to a previously created matrix multiplication descriptor of type [cublasLtMatmulDesc_t](#cublasltmatmuldesc-t).  
+`Adesc`, `Bdesc`, `Cdesc`, and `Ddesc` |  | Input | Handles to the previously created matrix layout descriptors of the type [cublasLtMatrixLayout_t](#cublasltmatrixlayout-t).  
+`algo` |  | Input | Descriptor which specifies which matrix multiplication algorithm should be used. See [cublasLtMatmulAlgo_t](#cublasltmatmulalgo-t). May point to `result->algo`.  
+`result` |  | Output | Pointer to the structure holding the results returned by this function. The results comprise of the required workspace and the calculated wave count. The `algo` field is never updated. See [cublasLtMatmulHeuristicResult_t](#cublasltmatmulheuristicresult-t).  
+`stream` |  | Input | CUDA stream used to determine the execution context. If the stream is associated with a Green Context, the check accounts for the SM count and resource constraints of that context.  
+  
+**Returns** :
+
+Return Value | Description  
+---|---  
+`CUBLAS_STATUS_INVALID_VALUE` | If matrix layout descriptors or the operation descriptor do not match the `algo` descriptor.  
+`CUBLAS_STATUS_NOT_SUPPORTED` | If the `algo` configuration or data type combination is not currently supported on the given device or execution context.  
+`CUBLAS_STATUS_ARCH_MISMATCH` | If the `algo` configuration cannot be run using the selected device.  
+`CUBLAS_STATUS_SUCCESS` | If the check was successful.  
+  
+See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
+
+###  3.4.21. cublasLtMatmulAlgoConfigGetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulAlgoConfigGetAttribute(
@@ -1634,7 +1707,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.21. cublasLtMatmulAlgoConfigSetAttribute() 
+###  3.4.22. cublasLtMatmulAlgoConfigSetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulAlgoConfigSetAttribute(
@@ -1664,7 +1737,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.22. cublasLtMatmulAlgoGetHeuristic() 
+###  3.4.23. cublasLtMatmulAlgoGetHeuristic() 
     
     
     cublasStatus_t cublasLtMatmulAlgoGetHeuristic(
@@ -1708,7 +1781,59 @@ Note
 
 This function may load some kernels using CUDA Driver API which may fail when there is no available GPU memory. Do not allocate the entire VRAM before running `cublasLtMatmulAlgoGetHeuristic()`.
 
-###  3.4.23. cublasLtMatmulAlgoGetIds() 
+###  3.4.24. cublasLtMatmulAlgoGetHeuristicForStream() 
+    
+    
+    cublasStatus_t cublasLtMatmulAlgoGetHeuristicForStream(
+          cublasLtHandle_t lightHandle,
+          cublasLtMatmulDesc_t operationDesc,
+          cublasLtMatrixLayout_t Adesc,
+          cublasLtMatrixLayout_t Bdesc,
+          cublasLtMatrixLayout_t Cdesc,
+          cublasLtMatrixLayout_t Ddesc,
+          cublasLtMatmulPreference_t preference,
+          int requestedAlgoCount,
+          cublasLtMatmulHeuristicResult_t heuristicResultsArray[],
+          int *returnAlgoCount,
+          cudaStream_t stream);
+    
+
+This function retrieves the possible algorithms for the matrix multiply operation [cublasLtMatmul()](#cublasltmatmul) function with the given input matrices A, B and C, and the output matrix D. The output is placed in `heuristicResultsArray[]` in the order of increasing estimated compute time.
+
+Unlike [cublasLtMatmulAlgoGetHeuristic()](#cublasltmatmulalgogetheuristic), this variant takes a CUDA stream into account when selecting algorithms. If the stream is associated with a Green Context (a CUDA execution context that provides access to a subset of GPU resources), the heuristic considers the SM count and resource constraints of that context. For more information see [Execution Context Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXECUTION__CONTEXT.html#group__CUDART__EXECUTION__CONTEXT).
+
+**Parameters** :
+
+Parameter | Memory | Input / Output | Description  
+---|---|---|---  
+`lightHandle` |  | Input | Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See [cublasLtHandle_t](#cublaslthandle-t).  
+`operationDesc` |  | Input | Handle to a previously created matrix multiplication descriptor of type [cublasLtMatmulDesc_t](#cublasltmatmuldesc-t).  
+`Adesc`, `Bdesc`, `Cdesc`, and `Ddesc` |  | Input | Handles to the previously created matrix layout descriptors of the type [cublasLtMatrixLayout_t](#cublasltmatrixlayout-t).  
+`preference` |  | Input | Pointer to the structure holding the heuristic search preferences descriptor. See [cublasLtMatmulPreference_t](#cublasltmatmulpreference-t).  
+`requestedAlgoCount` |  | Input | Size of the `heuristicResultsArray` (in elements). This is the requested maximum number of algorithms to return.  
+`heuristicResultsArray[]` |  | Output | Array containing the algorithm heuristics and associated runtime characteristics, returned by this function, in the order of increasing estimated compute time.  
+`returnAlgoCount` |  | Output | Number of algorithms returned by this function. This is the number of `heuristicResultsArray` elements written.  
+`stream` |  | Input | CUDA stream used to determine the execution context. If the stream is associated with a Green Context, the heuristic accounts for the SM count and resource constraints of that context.  
+  
+**Returns** :
+
+Return Value | Description  
+---|---  
+`CUBLAS_STATUS_INVALID_VALUE` | If `requestedAlgoCount` is less or equal to zero.  
+`CUBLAS_STATUS_NOT_SUPPORTED` | If no heuristic function available for current configuration.  
+`CUBLAS_STATUS_SUCCESS` | If query was successful. Inspect `heuristicResultsArray[0 to (returnAlgoCount -1)].state` for the status of the results.  
+  
+See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
+
+Note
+
+This function may load some kernels using CUDA Driver API which may fail when there is no available GPU memory. Do not allocate the entire VRAM before running `cublasLtMatmulAlgoGetHeuristicForStream()`.
+
+Note
+
+Calling [cublasLtMatmul()](#cublasltmatmul) on a stream associated with a Green Context with an algo requested using a different execution context is not guaranteed to work.
+
+###  3.4.25. cublasLtMatmulAlgoGetIds() 
     
     
     cublasStatus_t cublasLtMatmulAlgoGetIds(
@@ -1749,7 +1874,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.24. cublasLtMatmulAlgoInit() 
+###  3.4.26. cublasLtMatmulAlgoInit() 
     
     
     cublasStatus_t cublasLtMatmulAlgoInit(
@@ -1787,7 +1912,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.25. cublasLtMatmulDescCreate() 
+###  3.4.27. cublasLtMatmulDescCreate() 
     
     
     cublasStatus_t cublasLtMatmulDescCreate( cublasLtMatmulDesc_t *matmulDesc,
@@ -1814,7 +1939,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.26. cublasLtMatmulDescInit() 
+###  3.4.28. cublasLtMatmulDescInit() 
     
     
     cublasStatus_t cublasLtMatmulDescInit( cublasLtMatmulDesc_t matmulDesc,
@@ -1841,7 +1966,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.27. cublasLtMatmulDescDestroy() 
+###  3.4.29. cublasLtMatmulDescDestroy() 
     
     
     cublasStatus_t cublasLtMatmulDescDestroy(
@@ -1864,7 +1989,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.28. cublasLtMatmulDescGetAttribute() 
+###  3.4.30. cublasLtMatmulDescGetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulDescGetAttribute(
@@ -1902,7 +2027,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.29. cublasLtMatmulDescSetAttribute() 
+###  3.4.31. cublasLtMatmulDescSetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulDescSetAttribute(
@@ -1932,7 +2057,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.30. cublasLtMatmulPreferenceCreate() 
+###  3.4.32. cublasLtMatmulPreferenceCreate() 
     
     
     cublasStatus_t cublasLtMatmulPreferenceCreate(
@@ -1956,7 +2081,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.31. cublasLtMatmulPreferenceInit() 
+###  3.4.33. cublasLtMatmulPreferenceInit() 
     
     
     cublasStatus_t cublasLtMatmulPreferenceInit(
@@ -1980,7 +2105,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.32. cublasLtMatmulPreferenceDestroy() 
+###  3.4.34. cublasLtMatmulPreferenceDestroy() 
     
     
     cublasStatus_t cublasLtMatmulPreferenceDestroy(
@@ -2003,7 +2128,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.33. cublasLtMatmulPreferenceGetAttribute() 
+###  3.4.35. cublasLtMatmulPreferenceGetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulPreferenceGetAttribute(
@@ -2041,7 +2166,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.34. cublasLtMatmulPreferenceSetAttribute() 
+###  3.4.36. cublasLtMatmulPreferenceSetAttribute() 
     
     
     cublasStatus_t cublasLtMatmulPreferenceSetAttribute(
@@ -2071,7 +2196,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.35. cublasLtMatrixLayoutCreate() 
+###  3.4.37. cublasLtMatrixLayoutCreate() 
     
     
     cublasStatus_t cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
@@ -2101,7 +2226,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.36. cublasLtMatrixLayoutInit() 
+###  3.4.38. cublasLtMatrixLayoutInit() 
     
     
     cublasStatus_t cublasLtMatrixLayoutInit( cublasLtMatrixLayout_t matLayout,
@@ -2131,7 +2256,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.37. cublasLtGroupedMatrixLayoutCreate() 
+###  3.4.39. cublasLtGroupedMatrixLayoutCreate() 
     
     
     cublasStatus_t cublasLtGroupedMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
@@ -2164,7 +2289,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.38. cublasLtGroupedMatrixLayoutInit() 
+###  3.4.40. cublasLtGroupedMatrixLayoutInit() 
     
     
     cublasStatus_t cublasLtGroupedMatrixLayoutInit( cublasLtMatrixLayout_t matLayout,
@@ -2197,7 +2322,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.39. cublasLtMatrixLayoutDestroy() 
+###  3.4.41. cublasLtMatrixLayoutDestroy() 
     
     
     cublasStatus_t cublasLtMatrixLayoutDestroy(
@@ -2220,7 +2345,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.40. cublasLtMatrixLayoutGetAttribute() 
+###  3.4.42. cublasLtMatrixLayoutGetAttribute() 
     
     
     cublasStatus_t cublasLtMatrixLayoutGetAttribute(
@@ -2258,7 +2383,7 @@ Parameter | Memory | Input / Output | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.41. cublasLtMatrixLayoutSetAttribute() 
+###  3.4.43. cublasLtMatrixLayoutSetAttribute() 
     
     
     cublasStatus_t cublasLtMatrixLayoutSetAttribute(
@@ -2288,7 +2413,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.42. cublasLtMatrixTransform() 
+###  3.4.44. cublasLtMatrixTransform() 
     
     
     cublasStatus_t cublasLtMatrixTransform(
@@ -2336,7 +2461,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.43. cublasLtMatrixTransformDescCreate() 
+###  3.4.45. cublasLtMatrixTransformDescCreate() 
     
     
     cublasStatus_t cublasLtMatrixTransformDescCreate(
@@ -2362,7 +2487,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.44. cublasLtMatrixTransformDescInit() 
+###  3.4.46. cublasLtMatrixTransformDescInit() 
     
     
     cublasStatus_t cublasLtMatrixTransformDescInit(
@@ -2388,7 +2513,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.45. cublasLtMatrixTransformDescDestroy() 
+###  3.4.47. cublasLtMatrixTransformDescDestroy() 
     
     
     cublasStatus_t cublasLtMatrixTransformDescDestroy(
@@ -2411,7 +2536,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.46. cublasLtMatrixTransformDescGetAttribute() 
+###  3.4.48. cublasLtMatrixTransformDescGetAttribute() 
     
     
     cublasStatus_t cublasLtMatrixTransformDescGetAttribute(
@@ -2449,7 +2574,7 @@ Parameter | Memory | Input / Output | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.47. cublasLtMatrixTransformDescSetAttribute() 
+###  3.4.49. cublasLtMatrixTransformDescSetAttribute() 
     
     
     cublasStatus_t cublasLtMatrixTransformDescSetAttribute(
@@ -2479,7 +2604,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.48. cublasLtEmulationDescInit() 
+###  3.4.50. cublasLtEmulationDescInit() 
     
     
     cublasStatus_t cublasLtEmulationDescInit(cublasLtEmulationDesc_t emulationDesc);
@@ -2502,7 +2627,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.49. cublasLtEmulationDescCreate() 
+###  3.4.51. cublasLtEmulationDescCreate() 
     
     
     cublasStatus_t cublasLtEmulationDescCreate(cublasLtEmulationDesc_t* emulationDesc);
@@ -2525,7 +2650,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.50. cublasLtEmulationDescDestroy() 
+###  3.4.52. cublasLtEmulationDescDestroy() 
     
     
     cublasStatus_t cublasLtEmulationDescDestroy(cublasLtEmulationDesc_t emulationDesc);
@@ -2547,7 +2672,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.51. cublasLtEmulationDescSetAttribute() 
+###  3.4.53. cublasLtEmulationDescSetAttribute() 
     
     
     cublasStatus_t cublasLtEmulationDescSetAttribute(
@@ -2577,7 +2702,7 @@ Return Value | Description
   
 See [cublasStatus_t](#cublasstatus-t) for a complete list of valid return codes.
 
-###  3.4.52. cublasLtEmulationDescGetAttribute() 
+###  3.4.54. cublasLtEmulationDescGetAttribute() 
     
     
     cublasStatus_t cublasLtEmulationDescGetAttribute(

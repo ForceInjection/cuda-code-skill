@@ -1818,7 +1818,7 @@ __device__ unsigned int __vseteq4(unsigned int a, unsigned int b)
 
 Performs per-byte (un)signed comparison: returns 1 if all 4 pairs compare equal.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part == ‘b’ part. If both equalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part == ‘b’ part. If all 4 equalities are satisfied, function returns 1.
 
 Returns
 
@@ -1844,7 +1844,7 @@ __device__ unsigned int __vsetges4(unsigned int a, unsigned int b)
 
 Performs per-byte signed comparison: returns 1 if all 4 pairs compare greater than or equal.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part >= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part >= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -1870,7 +1870,7 @@ __device__ unsigned int __vsetgeu4(unsigned int a, unsigned int b)
 
 Performs per-byte unsigned comparison: returns 1 if all 4 pairs compare greater than or equal.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part >= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part >= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -1896,7 +1896,7 @@ __device__ unsigned int __vsetgts4(unsigned int a, unsigned int b)
 
 Performs per-byte signed comparison: returns 1 if all 4 pairs compare greater than.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part > ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part > ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -1922,7 +1922,7 @@ __device__ unsigned int __vsetgtu4(unsigned int a, unsigned int b)
 
 Performs per-byte unsigned comparison: returns 1 if all 4 pairs compare greater than.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part > ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part > ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -1948,7 +1948,7 @@ __device__ unsigned int __vsetles4(unsigned int a, unsigned int b)
 
 Performs per-byte signed comparison: returns 1 if all 4 pairs compare less than or equal.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -1974,7 +1974,7 @@ __device__ unsigned int __vsetleu4(unsigned int a, unsigned int b)
 
 Performs per-byte unsigned comparison: returns 1 if all 4 pairs compare less than or equal.
 
-Splits 4 bytes of each argument into 4 part, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 part, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -2000,7 +2000,7 @@ __device__ unsigned int __vsetlts4(unsigned int a, unsigned int b)
 
 Performs per-byte signed comparison: returns 1 if all 4 pairs compare less than.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -2026,7 +2026,7 @@ __device__ unsigned int __vsetltu4(unsigned int a, unsigned int b)
 
 Performs per-byte unsigned comparison: returns 1 if all 4 pairs compare less than.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If both inequalities are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part <= ‘b’ part. If all 4 inequalities are satisfied, function returns 1.
 
 Returns
 
@@ -2052,7 +2052,7 @@ __device__ unsigned int __vsetne4(unsigned int a, unsigned int b)
 
 Performs per-byte (un)signed comparison: returns 1 if all 4 pairs compare not equal.
 
-Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part != ‘b’ part. If both conditions are satisfied, function returns 1.
+Splits 4 bytes of each argument into 4 parts, each consisting of 1 byte. For corresponding parts function performs comparison ‘a’ part != ‘b’ part. If all 4 conditions are satisfied, function returns 1.
 
 Returns
 

@@ -11,6 +11,10 @@ Group functions (ncclGroupStart/ncclGroupEnd) can be used to merge multiple call
 ## Management Of Multiple GPUs From One Thread[](#management-of-multiple-gpus-from-one-thread "Permalink to this heading")
 
 When a single thread is managing multiple devices, group semantics must be used. This is because every NCCL call may have to block, waiting for other threads/ranks to arrive, before effectively posting the NCCL operation on the given stream. Hence, a simple loop on multiple devices like shown below could block on the first call waiting for the other ones:
+
+Warning
+
+We do not recommed using CUDA graph capture when managing multiple GPUs from one thread. In some cases `cudaGraphLaunch` may block, preventing the launch across all GPUs. See [Using NCCL with CUDA Graphs](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/cudagraph.html#using-nccl-with-cuda-graphs) for details.
     
     
     for (int i=0; i<nLocalDevs; i++) {

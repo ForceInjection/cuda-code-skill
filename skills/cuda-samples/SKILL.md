@@ -9,7 +9,7 @@ Curated index of ~50 official [NVIDIA CUDA Samples](https://github.com/NVIDIA/cu
 
 **Usage**: Search this file by pattern name (e.g., "reduction", "GEMM", "graph capture") or API name (e.g., "cublasSgemm", "cudaMallocAsync"). When a match is found, follow the GitHub permalink for the full implementation.
 
-**Source**: NVIDIA/cuda-samples (CUDA Toolkit 13.2), 175 `.cu` files, ~57K lines of CUDA C++.
+**Source**: NVIDIA/cuda-samples (CUDA Toolkit 13.3), 175 `.cu` files, ~57K lines of CUDA C++.
 
 ---
 

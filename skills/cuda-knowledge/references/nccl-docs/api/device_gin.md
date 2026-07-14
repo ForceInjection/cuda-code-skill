@@ -24,7 +24,9 @@ ncclGin(ncclDevComm const &comm, int contextIndex)[](#_CPPv4N7ncclGin7ncclGin
 
 Initializes a new `ncclGin` object. _comm_ is the device communicator created using [`ncclDevCommCreate()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/device_setup.html#c.ncclDevCommCreate "ncclDevCommCreate"). _contextIndex_ is the index of the GIN context – a network communication channel. Using multiple GIN contexts allows the implementation to spread traffic onto multiple connections, avoiding locking and bottlenecks. Therefore, performance-oriented kernels should cycle among the available contexts to improve resource utilization (the number of available contexts is available via `ginContextCount`).
 
-void put(ncclTeam team, int peer, ncclWindow_t dstWnd, size_t dstOffset, ncclWindow_t srcWnd, size_t srcOffset, size_t bytes, RemoteAction remoteAction, LocalAction localAction, Coop coop, DescriptorSmem descriptor, cuda::thread_scope alreadyReleased, cuda::thread_scope expected_scope)[](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "Permalink to this definition")  
+`ncclGin` always represents one specific context. To run a barrier whose fence covers every GIN context on the comm (useful when operations have been sharded across multiple contexts – e.g. multi-NIC), pass `ncclGinAllContexts(comm)` to `ncclGinBarrier()` in place of an `ncclGin`.
+
+void put(ncclTeam team, int peer, ncclWindow_t dstWnd, size_t dstOffset, ncclWindow_t srcWnd, size_t srcOffset, size_t bytes, RemoteAction remoteAction, LocalAction localAction, Coop coop, DescriptorSmem descriptor, cuda::thread_scope alreadyReleased, cuda::thread_scope expected_scope, SegmentType bufType)[](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "Permalink to this definition")  
 
     
 
@@ -32,17 +34,37 @@ Schedules a device-initiated, one-sided data transfer operation from a local buf
 
 _peer_ is a rank within _team_ (see [Teams](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-teams)); it may refer to the local rank (a loopback). The destination and source buffers are each specified using the window (_dstWnd_ , _srcWnd_) and a byte-based offset (_dstOffset_ , _srcOffset_). _bytes_ specifies the data transfer count in bytes. If GIN is initialized with connection type `NCCL_GIN_CONNECTION_RAIL`, _peer_ must be within the same rail team as the local rank.
 
-Arguments beyond the first seven are optional. _remoteAction_ and _localAction_ specify actions to undertake on the destination peer and on the local rank when the payload has been settled and the input has been consumed (respectively). They default to `ncclGin_None` (no action); other options include `ncclGin_Signal{Inc|Add}` (for _remoteAction_) and `ncclGin_CounterInc` (for _localAction_); see [Signals and Counters](#devapi-signals) below for more details. _coop_ indicates the set of threads participating in this operation (see [Thread Groups](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-coops)); it defaults to `ncclCoopThread` (a single device thread), which is the recommended model.
+Arguments beyond the first seven are optional. _remoteAction_ and _localAction_ specify actions to undertake on the destination peer and on the local rank when the payload has been settled and the input has been consumed (respectively). They default to `ncclGin_None` (no action); other options include `ncclGin_Signal{Inc|Add}` (for _remoteAction_) and `ncclGin_CounterInc` (for _localAction_); see [Signals and Counters](#devapi-signals) below for more details. _coop_ indicates the set of threads participating in this operation (see [Thread Groups](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-coops)); it defaults to `ncclCoopThread` (a single device thread), which is the recommended model. _bufType_ specifies the physical memory composition of the source and destination buffers (see [Segment Types](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-segment-types)); it defaults to `ncclGin_SegmentDevice`.
 
-The visibility of the signal on the destination peer implies the visibility of the put data it is attached to _and all the preceding puts to the same peer, provided that they were issued using the same GIN context_.
+The visibility of the signal on the destination peer implies the visibility of the put data it is attached to. Depending on the signal type, the visibility of the signal may also imply the visibility of all the preceding puts to the same peer on the same context.
 
 The API also defines an alternative, “convenience” variant of this method that uses `ncclSymPtr` types to specify the buffers and expects size to be conveyed in terms of the number of elements instead of the byte count. There are also two `putValue` variants that take a single element at a time (no greater than eight bytes), passed by value.
+
+void get(ncclTeam team, int peer, ncclWindow_t remoteWnd, size_t remoteOffset, ncclWindow_t localWnd, size_t localOffset, size_t bytes, Coop coop = ncclCoopThread{}, DescriptorSmem descriptor = ncclGin_None{}, uint32_t optFlags = ncclGinOptFlagsDefault, SegmentType bufType = ncclGin_SegmentDevice{})[](#_CPPv4N7ncclGin3getE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t4Coop14DescriptorSmem8uint32_t11SegmentType "Permalink to this definition")  
+
+    
+
+Schedules a device-initiated, one-sided data transfer operation from a remote buffer to a local buffer (available since NCCL 2.30.3).
+
+_peer_ is a rank within _team_ (see [Teams](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-teams)); it may refer to the local rank (a loopback). The remote and local buffers are each specified using the window (_remoteWnd_ , _localWnd_) and a byte-based offset (_remoteOffset_ , _localOffset_). _bytes_ specifies the data transfer count in bytes. If GIN is initialized with connection type `NCCL_GIN_CONNECTION_RAIL`, _peer_ must be within the same rail team as the local rank. _bufType_ specifies the physical memory composition of the source and destination buffers (see [Segment Types](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-segment-types)); it defaults to `ncclGin_SegmentDevice`.
 
 void flush(Coop coop, cuda::memory_order ord = cuda::memory_order_acquire)[](#_CPPv4N7ncclGin5flushE4CoopN4cuda12memory_orderE "Permalink to this definition")  
 
     
 
-Ensures that all the pending transfer operations scheduled by any threads of _coop_ are locally consumed, meaning that their source buffers are safe to reuse. Makes no claims regarding the completion status on the remote peer(s).
+Ensures that all the pending transfer operations scheduled by any threads of _coop_ are locally consumed. For put operations, this means that the source buffers are safe to reuse; this makes no claims regarding the completion status on the remote peer(s). For get operations, this means that the data is visible to the local rank.
+
+void flushAsync(ncclTeam team, uint32_t peer, ncclGinRequest_t *request, Coop coop = ncclCoopThread{}, uint32_t optFlags = ncclGinOptFlagsDefault, DescriptorSmem descriptor = ncclGin_None{})[](#_CPPv4N7ncclGin10flushAsyncE8ncclTeam8uint32_tP16ncclGinRequest_t4Coop8uint32_t14DescriptorSmem "Permalink to this definition")  
+
+    
+
+Initiates a non-blocking flush operation for one peer (see [`ncclGin::flush()`](#_CPPv4N7ncclGin5flushE4CoopN4cuda12memory_orderE "ncclGin::flush")). _peer_ is a rank within _team_ (see [Teams](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-teams)). _request_ is supplied by the caller and initialized by `flushAsync`. The caller may use _request_ to determine when the flush is complete (see [`ncclGin::wait()`](#_CPPv4N7ncclGin4waitER16ncclGinRequest_t4Coop14DescriptorSmemN4cuda12memory_orderE "ncclGin::wait")). Available since NCCL 2.30.3.
+
+void wait(ncclGinRequest_t &request, Coop coop = ncclCoopThread{}, DescriptorSmem descriptor = ncclGin_None{}, cuda::memory_order ord = cuda::memory_order_acquire)[](#_CPPv4N7ncclGin4waitER16ncclGinRequest_t4Coop14DescriptorSmemN4cuda12memory_orderE "Permalink to this definition")  
+
+    
+
+Blocks until _request_ is complete. Available since NCCL 2.30.3.
 
 ### Signals and Counters[](#signals-and-counters "Permalink to this heading")
 
@@ -50,33 +72,115 @@ type ncclGinSignal_t[](#_CPPv415ncclGinSignal_t "Permalink to this definition
 
     
 
-Signals are used to trigger actions on remote peers, most commonly on the completion of a [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::put") operation. They each have a 64-bit integer value associated with them that can be manipulated atomically.
+Signals are used to trigger actions on remote peers, most commonly on the completion of a [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") operation. They each have a 64-bit integer value associated with them that can be manipulated atomically.
 
-struct ncclGin_SignalAdd[](#_CPPv417ncclGin_SignalAdd "Permalink to this definition")  
+Since NCCL 2.30.5, there are two types of signals: _strong_ and _weak_. Strong signals imply the visibility of all the preceding puts to the same peer on the same context. Weak signals imply only the visibility of the put data the signal is attached to.
 
-    
-
-[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N17ncclGin_SignalAdd6signalE "Permalink to this definition")  
+struct ncclGin_StrongSignalInc[](#_CPPv423ncclGin_StrongSignalInc "Permalink to this definition")  
 
     
 
-uint64_t value[](#_CPPv4N17ncclGin_SignalAdd5valueE "Permalink to this definition")  
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N23ncclGin_StrongSignalInc6signalE "Permalink to this definition")  
 
     
 
-struct ncclGin_SignalInc[](#_CPPv417ncclGin_SignalInc "Permalink to this definition")  
+struct ncclGin_StrongSignalAdd[](#_CPPv423ncclGin_StrongSignalAdd "Permalink to this definition")  
 
     
 
-[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N17ncclGin_SignalInc6signalE "Permalink to this definition")  
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N23ncclGin_StrongSignalAdd6signalE "Permalink to this definition")  
 
     
 
-These objects can be passed as the _remoteAction_ arguments of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::put") and [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") to describe the actions to perform on the peer on receipt – in this case, increase the value of a _signal_ specified by index. `ncclGin_SignalInc{signalIdx}` is functionally equivalent to `ncclGin_SignalAdd{signalIdx, 1}`; however, it may not be mixed with other signal-modifying operations without an intervening signal reset (see below). Signal values use “rolling” comparison logic to ensure that an unsigned overflow maintains the property of `x < x + 1`.
+uint64_t value[](#_CPPv4N23ncclGin_StrongSignalAdd5valueE "Permalink to this definition")  
+
+    
+
+struct ncclGin_WeakSignalInc[](#_CPPv421ncclGin_WeakSignalInc "Permalink to this definition")  
+
+    
+
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N21ncclGin_WeakSignalInc6signalE "Permalink to this definition")  
+
+    
+
+struct ncclGin_WeakSignalAdd[](#_CPPv421ncclGin_WeakSignalAdd "Permalink to this definition")  
+
+    
+
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N21ncclGin_WeakSignalAdd6signalE "Permalink to this definition")  
+
+    
+
+uint64_t value[](#_CPPv4N21ncclGin_WeakSignalAdd5valueE "Permalink to this definition")  
+
+    
+
+These objects can be passed as the _remoteAction_ arguments of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") and [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") to describe the actions to perform on the peer on receipt – in this case, increase the value of a _signal_ specified by index. `SignalInc{signalIdx}` is functionally equivalent to `SignalAdd{signalIdx, 1}`; however, it may not be mixed with other signal-modifying operations without an intervening signal reset (see below). Signal values use “rolling” comparison logic to ensure that an unsigned overflow maintains the property of `x < x + 1`.
+
+struct ncclGin_StrongVASignalInc[](#_CPPv425ncclGin_StrongVASignalInc "Permalink to this definition")  
+
+    
+
+ncclWindow_t signalWindow[](#_CPPv4N25ncclGin_StrongVASignalInc12signalWindowE "Permalink to this definition")  
+
+    
+
+size_t signalOffset[](#_CPPv4N25ncclGin_StrongVASignalInc12signalOffsetE "Permalink to this definition")  
+
+    
+
+struct ncclGin_StrongVASignalAdd[](#_CPPv425ncclGin_StrongVASignalAdd "Permalink to this definition")  
+
+    
+
+ncclWindow_t signalWindow[](#_CPPv4N25ncclGin_StrongVASignalAdd12signalWindowE "Permalink to this definition")  
+
+    
+
+size_t signalOffset[](#_CPPv4N25ncclGin_StrongVASignalAdd12signalOffsetE "Permalink to this definition")  
+
+    
+
+uint64_t value[](#_CPPv4N25ncclGin_StrongVASignalAdd5valueE "Permalink to this definition")  
+
+    
+
+struct ncclGin_WeakVASignalInc[](#_CPPv423ncclGin_WeakVASignalInc "Permalink to this definition")  
+
+    
+
+ncclWindow_t signalWindow[](#_CPPv4N23ncclGin_WeakVASignalInc12signalWindowE "Permalink to this definition")  
+
+    
+
+size_t signalOffset[](#_CPPv4N23ncclGin_WeakVASignalInc12signalOffsetE "Permalink to this definition")  
+
+    
+
+struct ncclGin_WeakVASignalAdd[](#_CPPv423ncclGin_WeakVASignalAdd "Permalink to this definition")  
+
+    
+
+ncclWindow_t signalWindow[](#_CPPv4N23ncclGin_WeakVASignalAdd12signalWindowE "Permalink to this definition")  
+
+    
+
+size_t signalOffset[](#_CPPv4N23ncclGin_WeakVASignalAdd12signalOffsetE "Permalink to this definition")  
+
+    
+
+uint64_t value[](#_CPPv4N23ncclGin_WeakVASignalAdd5valueE "Permalink to this definition")  
+
+    
+
+These objects represent “VA signals”: signals that are located at an arbitrary VA (window and offset pair) instead of a pre-allocated signal index. Like the `ncclGin_StrongSignalInc` and `ncclGin_StrongSignalAdd` objects, these objects can be passed as the _remoteAction_ arguments of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put") and [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") to increment a signal on the peer. To use a VA signal, the window must be registered with flags [`NCCL_WIN_STRICT_ORDERING`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/flags.html#c.NCCL_WIN_STRICT_ORDERING "NCCL_WIN_STRICT_ORDERING"). When an address is used as a signal, all reads and writes to the address must be issued via GIN (i.e., a `RemoteAction` or GIN signal method).
 
 struct ncclGin_VASignalInc[](#_CPPv419ncclGin_VASignalInc "Permalink to this definition")  
 
     
+
+Deprecated since version 2.30.5: Prefer [`ncclGin_StrongVASignalInc`](#_CPPv425ncclGin_StrongVASignalInc "ncclGin_StrongVASignalInc") or [`ncclGin_WeakVASignalInc`](#_CPPv423ncclGin_WeakVASignalInc "ncclGin_WeakVASignalInc") instead.
 
 ncclWindow_t signalWindow[](#_CPPv4N19ncclGin_VASignalInc12signalWindowE "Permalink to this definition")  
 
@@ -90,6 +194,8 @@ struct ncclGin_VASignalAdd[](#_CPPv419ncclGin_VASignalAdd "Permalink to this 
 
     
 
+Deprecated since version 2.30.5: Prefer [`ncclGin_StrongVASignalAdd`](#_CPPv425ncclGin_StrongVASignalAdd "ncclGin_StrongVASignalAdd") or [`ncclGin_WeakVASignalAdd`](#_CPPv423ncclGin_WeakVASignalAdd "ncclGin_WeakVASignalAdd") instead.
+
 ncclWindow_t signalWindow[](#_CPPv4N19ncclGin_VASignalAdd12signalWindowE "Permalink to this definition")  
 
     
@@ -102,7 +208,31 @@ uint64_t value[](#_CPPv4N19ncclGin_VASignalAdd5valueE "Permalink to this defi
 
     
 
-These objects represent “VA signals”: signals that are located at an arbitrary VA (window and offset pair) instead of a pre-allocated signal index. Like the `ncclGin_SignalInc` and `ncclGinSignalAdd` objects, these objects can be passed as the _remoteAction_ arguments of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::put") and [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") to increment a signal on the peer. To use a VA signal, the window must be registered with flags [`NCCL_WIN_COLL_STRICT_ORDERING`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/flags.html#c.NCCL_WIN_COLL_STRICT_ORDERING "NCCL_WIN_COLL_STRICT_ORDERING"). When an address is used as a signal, all reads and writes to the address must be issued via GIN (i.e., a `RemoteAction` or GIN signal method).
+struct ncclGin_SignalInc[](#_CPPv417ncclGin_SignalInc "Permalink to this definition")  
+
+    
+
+Deprecated since version 2.30.5: Prefer [`ncclGin_StrongSignalInc`](#_CPPv423ncclGin_StrongSignalInc "ncclGin_StrongSignalInc") or [`ncclGin_WeakSignalInc`](#_CPPv421ncclGin_WeakSignalInc "ncclGin_WeakSignalInc") instead.
+
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N17ncclGin_SignalInc6signalE "Permalink to this definition")  
+
+    
+
+struct ncclGin_SignalAdd[](#_CPPv417ncclGin_SignalAdd "Permalink to this definition")  
+
+    
+
+Deprecated since version 2.30.5: Prefer [`ncclGin_StrongSignalAdd`](#_CPPv423ncclGin_StrongSignalAdd "ncclGin_StrongSignalAdd") or [`ncclGin_WeakSignalAdd`](#_CPPv421ncclGin_WeakSignalAdd "ncclGin_WeakSignalAdd") instead.
+
+[ncclGinSignal_t](#_CPPv415ncclGinSignal_t "ncclGinSignal_t") signal[](#_CPPv4N17ncclGin_SignalAdd6signalE "Permalink to this definition")  
+
+    
+
+uint64_t value[](#_CPPv4N17ncclGin_SignalAdd5valueE "Permalink to this definition")  
+
+    
+
+Since NCCL 2.30.5, these signal types are deprecated in favor of explicitly strong and weak signal objects. The strength of these signals is determined by the value of `ginStrongSignalsRequired` when creating the device communicator.
 
 **Signal methods of ncclGin:**
 
@@ -122,7 +252,7 @@ void [ncclGin](#_CPPv47ncclGin "ncclGin")::resetSignal([ncclGinSignal_t](#_CPPv4
 
     
 
-These are signal-specific methods of [`ncclGin`](#_CPPv47ncclGin "ncclGin"). [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") implements an explicit signal notification without an accompanying data transfer operation; it takes a subset of arguments of [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::put"). [`ncclGin::readSignal()`](#_CPPv4N7ncclGin10readSignalE15ncclGinSignal_tiN4cuda12memory_orderE "ncclGin::readSignal") returns the bottom _bits_ of the value of the _signal_. [`ncclGin::waitSignal()`](#_CPPv4N7ncclGin10waitSignalE4Coop15ncclGinSignal_t8uint64_tiN4cuda12memory_orderE "ncclGin::waitSignal") waits for the bottom _bits_ of the _signal_ value to meet or exceed _least_. Finally, [`ncclGin::resetSignal()`](#_CPPv4N7ncclGin11resetSignalE15ncclGinSignal_t "ncclGin::resetSignal") resets the _signal_ value to `0` (this method may not race with concurrent modifications to the signal).
+These are signal-specific methods of [`ncclGin`](#_CPPv47ncclGin "ncclGin"). [`ncclGin::signal()`](#_CPPv4N7ncclGin6signalE8ncclTeami12RemoteAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::signal") implements an explicit signal notification without an accompanying data transfer operation; it takes a subset of arguments of [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put"). [`ncclGin::readSignal()`](#_CPPv4N7ncclGin10readSignalE15ncclGinSignal_tiN4cuda12memory_orderE "ncclGin::readSignal") returns the bottom _bits_ of the value of the _signal_. [`ncclGin::waitSignal()`](#_CPPv4N7ncclGin10waitSignalE4Coop15ncclGinSignal_t8uint64_tiN4cuda12memory_orderE "ncclGin::waitSignal") waits for the bottom _bits_ of the _signal_ value to meet or exceed _least_. Finally, [`ncclGin::resetSignal()`](#_CPPv4N7ncclGin11resetSignalE15ncclGinSignal_t "ncclGin::resetSignal") resets the _signal_ value to `0` (this method may not race with concurrent modifications to the signal).
 
 uint64_t [ncclGin](#_CPPv47ncclGin "ncclGin")::readSignal(ncclWindow_t signalWindow, size_t signalOffset, int bits = 64, cuda::memory_order ord = cuda::memory_order_acquire)[](#_CPPv4N7ncclGin10readSignalE12ncclWindow_t6size_tiN4cuda12memory_orderE "Permalink to this definition")  
 
@@ -152,7 +282,7 @@ struct ncclGin_CounterInc[](#_CPPv418ncclGin_CounterInc "Permalink to this de
 
     
 
-This object can be passed as the _localAction_ argument of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE "ncclGin::put"). It is the only action defined for counters.
+This object can be passed as the _localAction_ argument of methods such as [`ncclGin::put()`](#_CPPv4N7ncclGin3putE8ncclTeami12ncclWindow_t6size_t12ncclWindow_t6size_t6size_t12RemoteAction11LocalAction4Coop14DescriptorSmemN4cuda12thread_scopeEN4cuda12thread_scopeE11SegmentType "ncclGin::put"). It is the only action defined for counters.
 
 **Counter methods of ncclGin:**
 
@@ -191,8 +321,17 @@ ncclGinBarrierSession([Coop](#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSe
 
 Initializes a new network barrier session. This is the general-purpose variant to be used, e.g., when communicating with ranks from the world team (see [Teams](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/deviceapi.html#devapi-teams)), whereas the previous variant was specific to the rail team. This variant expects _team_ to be passed as an argument, and also takes an extra _handle_ argument indicating the location of the underlying barriers (typically set to the `railGinBarrier` field of the device communicator).
 
-void sync([Coop](#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession::Coop") coop, cuda::memory_order order, ncclGinFenceLevel fence)[](#_CPPv4N21ncclGinBarrierSession4syncE4CoopN4cuda12memory_orderE17ncclGinFenceLevel "Permalink to this definition")  
+void sync([Coop](#_CPPv4I0E21ncclGinBarrierSession "ncclGinBarrierSession::Coop") coop, cuda::memory_order order, ncclGinFenceLevel fence = ncclGinFenceLevel::Put | ncclGinFenceLevel::Get)[](#_CPPv4N21ncclGinBarrierSession4syncE4CoopN4cuda12memory_orderE17ncclGinFenceLevel "Permalink to this definition")  
 
     
 
-Synchronizes all threads of all team members that participate in the barrier session. `ncclGinFenceLevel::Relaxed` is the only defined value for _fence_ for now.
+Synchronizes all threads of all team members that participate in the barrier session. The _fence_ argument is a bit-flag enum selecting which prior network operations must be complete after the barrier returns; if omitted it defaults to `ncclGinFenceLevel::Put | ncclGinFenceLevel::Get` so callers who do not opt in explicitly get the strongest guarantee:
+
+  * `ncclGinFenceLevel::None` — pure synchronization, no drain.
+
+  * `ncclGinFenceLevel::Put` — after the barrier returns, puts issued by other team members targeting the calling rank prior to the barrier are visible in the calling rank’s memory.
+
+  * `ncclGinFenceLevel::Get` — after the barrier returns, gets issued by the calling rank prior to the barrier have landed in the calling rank’s local memory.
+
+
+The fence values are bit flags and compose via bitwise OR. To request both `Put` and `Get` semantics, pass `ncclGinFenceLevel::Put | ncclGinFenceLevel::Get`. `ncclGinFenceLevel::Relaxed` is preserved as a deprecated alias for `None` for source-level backward compatibility; new code should use `None`.

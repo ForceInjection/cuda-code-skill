@@ -67,16 +67,16 @@
 
 ## 3. 覆盖了哪些文档
 
-转换后的文档覆盖 vLLM 开发最常用的 6 套参考资料，总计约 8.6 MB、1032 个文件（含搜索指南共 1043 个）：
+转换后的文档覆盖 vLLM 开发最常用的 6 套参考资料，总计约 13.8 MB、1423 个文件（含搜索指南） ：
 
 | 文档集                | 文件数 | 大小   | 主要内容                                       |
 | --------------------- | ------ | ------ | ---------------------------------------------- |
-| PTX ISA 9.1           | 405    | 2.3 MB | 完整指令集，`wgmma`、`cp.async`、`mbarrier` 等 |
-| CUDA Runtime API 13.1 | 104    | 1.2 MB | 37 模块 + 66 数据结构                          |
-| CUDA Driver API 13.1  | 129    | 1.2 MB | 49 模块（含虚拟内存、 context 管理）           |
-| CUDA Math API 13.x    | 41     | 528 KB | `half` / `bfloat16` / FP8 内置函数，类型转换   |
-| cuBLAS 13.2           | 319    | 2.9 MB | GEMM、`cuBLASLt`、FP8 GEMM、epilogue 融合      |
-| NCCL                  | 34     | 516 KB | API + 使用指南 + 全量环境变量                  |
+| PTX ISA 9.3           | 679    | 7.6 MB | 完整指令集，`wgmma`、`cp.async`、`mbarrier` 等 |
+| CUDA Runtime API 13.3 | 104    | 1.1 MB | 37 模块 + 66 数据结构                          |
+| CUDA Driver API 13.3  | 129    | 1.2 MB | 49 模块（含虚拟内存、 context 管理）           |
+| CUDA Math API 13.3    | 41     | 528 KB | `half` / `bfloat16` / FP8 内置函数，类型转换   |
+| cuBLAS 13.3           | 354    | 3.0 MB | GEMM、`cuBLASLt`、FP8 GEMM、epilogue 融合      |
+| NCCL                  | 57     | 760 KB | API + 使用指南 + 全量环境变量                  |
 
 文档经过清洗：去掉重复 TOC、导航栏、冗余 URL、版权声明等噪音，**体积压缩 76-83%**，只保留你真正需要的内容。
 

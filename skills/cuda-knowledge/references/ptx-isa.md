@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-- [Local Documentation](#local-documentation) — 405 markdown files, 2.3MB
+- [Local Documentation](#local-documentation) — 679 markdown files, 7.6MB
 - [When to Use PTX Documentation](#when-to-use-ptx-documentation) — Inspecting code, inline PTX, TensorCore ops
 - [Quick Search Examples](#quick-search-examples) — WGMMA fragments, TMA swizzling, specific instructions
 - [Documentation Structure](#documentation-structure) — Chapter organization
@@ -20,7 +20,7 @@
 
 The documentation has been converted to markdown with:
 - ✅ All tables, code blocks, and formatting preserved
-- ✅ 405 files organized by chapter
+- ✅ 679 files organized by chapter
 - ✅ Full searchability with grep/ripgrep
 - ✅ Section numbers for precise navigation
 - ✅ 1049 diagrams referenced as URLs (NVIDIA CDN)
@@ -233,5 +233,5 @@ For understanding async operations, memory ordering, and barriers:
 ## External Resources
 
 - Official PTX docs online: https://docs.nvidia.com/cuda/parallel-thread-execution/
-- PTX ISA PDF: https://docs.nvidia.com/cuda/pdf/ptx_isa_9.1.pdf
+- PTX ISA PDF: https://docs.nvidia.com/cuda/pdf/ptx_isa_9.3.pdf
 - CUTLASS library: https://github.com/NVIDIA/cutlass (uses PTX heavily)

@@ -105,7 +105,7 @@ Common failures and fixes:
 | Error                   | Cause                                                  | Fix                                                                                                                   |
 | ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `ERR_NVGPUCTRPERM`      | Container/profiling permission denied                  | Use `--set launch` instead of `--set full`, OR on the host: `echo 0 \| sudo tee /proc/sys/kernel/perf_event_paranoid` |
-| `command not found`     | ncu not in PATH (usually at `/usr/local/cuda/bin/ncu`) | `export PATH=/usr/local/cuda-12.8/bin:$PATH`                                                                          |
+| `command not found`     | ncu not in PATH (usually at `/usr/local/cuda/bin/ncu`) | `export PATH=/usr/local/cuda/bin:$PATH`                                                                       |
 | `==PROF== Disconnected` | Target process exited or spawned child processes       | Use `ncu_profile.py --build-only` to create a standalone bench executable                                             |
 
 ---

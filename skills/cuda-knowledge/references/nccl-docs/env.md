@@ -55,13 +55,25 @@ The `NCCL_SOCKET_FAMILY` variable allows users to force NCCL to use only IPv4 or
 
 Set to `AF_INET` to force the use of IPv4, or `AF_INET6` to force IPv6 usage.
 
+### NCCL_SOCKET_MAGIC[](#nccl-socket-magic "Permalink to this heading")
+
+The `NCCL_SOCKET_MAGIC` variable overrides the 64-bit magic value used in NCCL’s internal TCP socket handshake for transports that rely on it (for example the Socket network plugin and InfiniBand connection bootstrap sockets). It does **not** change bootstrap communicators that use `NCCL_COMM_ID` or [`ncclGetUniqueId()`](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/comms.html#c.ncclGetUniqueId "ncclGetUniqueId"); those use a separate per-communicator magic.
+
+Setting the same value on every process in a job (for example `0x$(printf '%x' "$SLURM_JOB_ID")` under Slurm) can reduce accidental cross-talk when unrelated workloads share nodes and ports.
+
+#### Values accepted[](#id4 "Permalink to this heading")
+
+Unset or empty: NCCL uses the historical built-in default.
+
+Otherwise: a non-negative integer in decimal or hexadecimal (with optional `0x` prefix), parsed as for `strtoull(..., 0)`. Invalid strings fall back to the built-in default with a warning.
+
 ### NCCL_SOCKET_RETRY_CNT[](#nccl-socket-retry-cnt "Permalink to this heading")
 
 (since 2.24)
 
 The `NCCL_SOCKET_RETRY_CNT` variable specifies the number of times NCCL retries to establish a socket connection after an `ETIMEDOUT`, `ECONNREFUSED`, or `EHOSTUNREACH` error.
 
-#### Values accepted[](#id3 "Permalink to this heading")
+#### Values accepted[](#id5 "Permalink to this heading")
 
 The default value is 34, any positive value is valid.
 
@@ -71,7 +83,7 @@ The default value is 34, any positive value is valid.
 
 The `NCCL_SOCKET_RETRY_SLEEP_MSEC` variable specifies the number of milliseconds NCCL waits before retrying to establish a socket connection after the first `ETIMEDOUT`, `ECONNREFUSED`, or `EHOSTUNREACH` error. For subsequent errors, the waiting time scales linearly with the error count. The total time will therefore be (N+1) * N/2 * `NCCL_SOCKET_RETRY_SLEEP_MSEC`, where N is given by `NCCL_SOCKET_RETRY_CNT`. With the default values of `NCCL_SOCKET_RETRY_CNT` and `NCCL_SOCKET_RETRY_SLEEP_MSEC`, the total retry time will be approx. 60 seconds.
 
-#### Values accepted[](#id4 "Permalink to this heading")
+#### Values accepted[](#id6 "Permalink to this heading")
 
 The default value is 100 milliseconds, any positive value is valid.
 
@@ -81,7 +93,7 @@ The default value is 100 milliseconds, any positive value is valid.
 
 The `NCCL_SOCKET_POLL_TIMEOUT_MSEC` variable specifies a timeout in milliseconds for a poll which can reduce the CPU usage during bootstrap. Normally NCCL will retry the operation until it completes. Polling in between attempts should reduce load on the CPU so that it can engage in activities that might make the operation able to complete sooner.
 
-#### Values accepted[](#id5 "Permalink to this heading")
+#### Values accepted[](#id7 "Permalink to this heading")
 
 Non-negative integer. The old behavior corresponds to 0 (the default). If 0, it will not poll, but keep trying to progress the socket operation without pause. If non-zero, it will poll for up that amount of time before trying to progress the operation again.
 
@@ -91,7 +103,7 @@ Non-negative integer. The old behavior corresponds to 0 (the default). If 0, it 
 
 The `NCCL_SOCKET_NTHREADS` variable specifies the number of CPU helper threads used per network connection for socket transport. Increasing this value may increase the socket transport performance, at the cost of a higher CPU usage.
 
-#### Values accepted[](#id6 "Permalink to this heading")
+#### Values accepted[](#id8 "Permalink to this heading")
 
 1 to 16. On AWS, the default value is 2; on Google Cloud instances with the gVNIC network interface, the default value is 4 (since 2.5.6); in other cases, the default value is 1.
 
@@ -103,7 +115,7 @@ For generic 100G networks, this value can be manually set to 4. However, the pro
 
 The `NCCL_NSOCKS_PERTHREAD` variable specifies the number of sockets opened by each helper thread of the socket transport. In environments where per-socket speed is limited, setting this variable larger than 1 may improve the network performance.
 
-#### Values accepted[](#id7 "Permalink to this heading")
+#### Values accepted[](#id9 "Permalink to this heading")
 
 On AWS, the default value is 8; in other cases, the default value is 1.
 
@@ -117,7 +129,7 @@ To maximize inter-node communication performance when using multiple NICs, NCCL 
 
 This has no effect on systems with only one NIC.
 
-#### Values accepted[](#id8 "Permalink to this heading")
+#### Values accepted[](#id10 "Permalink to this heading")
 
 0: Always use the same NIC for the same ring/tree, to avoid crossing network rails. Suited for networks with per NIC switches (rails), with a slow inter-rail connection. Note that if the communicator does not contain the same GPUs on each node, NCCL may still need to communicate across NICs.
 
@@ -129,17 +141,25 @@ This has no effect on systems with only one NIC.
 
 The `NCCL_IB_HCA` variable specifies which Host Channel Adapter (RDMA) interfaces to use for communication.
 
-#### Values accepted[](#id9 "Permalink to this heading")
+#### Values accepted[](#id11 "Permalink to this heading")
 
-Define to filter IB Verbs interfaces to be used by NCCL. The list is comma-separated; port numbers can be specified using the `:` symbol. An optional prefix `^` indicates the list is an exclude list. A second optional prefix `=` indicates that the tokens are exact names, otherwise by default NCCL would treat each token as a prefix.
+Define to filter IB Verbs interfaces to be used by NCCL. The list is comma-separated; each entry follows the form `<hca>[:<port>[:<rail>[:<plane>]]]`, where fields after `<hca>` are optional and separated by the `:` symbol. An optional prefix `^` indicates the list is an exclude list. A second optional prefix `=` indicates that the tokens are exact names, otherwise by default NCCL would treat each token as a prefix.
+
+When `<port>` is omitted, all ports on the HCA are used. If `<rail>` or `<plane>` is specified while `<port>` is omitted, the `<port>` field must still be present as an empty field to preserve field positions. For example, `mlx5_0::0:0` uses all ports on `mlx5_0` with rail 0 and plane 0.
+
+Note: The optional `<rail>` and `<plane>` fields assign a rail and plane identity to the associated device. Both default to `-1` (unassigned) when omitted.
 
 Examples:
 
 `mlx5` : Use all ports of all cards starting with `mlx5`
 
-`=mlx5_0:1,mlx5_1:1` : Use ports 1 of cards `mlx5_0` and `mlx5_1`.
+`=mlx5_0:1,mlx5_1:1` : Use ports 1 of cards `mlx5_0` and `mlx5_1`. Rail and plane assignment are both undefined.
 
 `^=mlx5_1,mlx5_4` : Do not use cards `mlx5_1` and `mlx5_4`.
+
+`=mlx5_0:1:0:0,mlx5_1:1:0:1` : Use port 1 on each of `mlx5_0` and `mlx5_1`, assigning both to rail 0 with `mlx5_0` on plane 0 and `mlx5_1` on plane 1.
+
+`=mlx5_0::0:0,mlx5_1::0:1` : Use all ports on each of `mlx5_0` and `mlx5_1`, assigning both to rail 0 with `mlx5_0` on plane 0 and `mlx5_1` on plane 1.
 
 Note: using `mlx5_1` without a preceding `=` will select `mlx5_1` as well as `mlx5_10` to `mlx5_19`, if they exist. It is therefore always recommended to add the `=` prefix to ensure an exact match.
 
@@ -170,7 +190,7 @@ NCCL_IB_TIMEOUT | Timeout | NCCL_IB_RETRY_CNT | Total Time Before Error
 25 | 2.3 minutes | 7 | 16 minutes  
 … | … | … | …  
   
-#### Values accepted[](#id10 "Permalink to this heading")
+#### Values accepted[](#id12 "Permalink to this heading")
 
 The default value used by NCCL is 20 (since 2.23; it was 18 since 2.14, and 14 before that).
 
@@ -186,7 +206,7 @@ The `NCCL_IB_RETRY_CNT` variable controls the InfiniBand retry count. Total time
 
 For more information, see section 12.7.38 of the InfiniBand specification Volume 1.
 
-#### Values accepted[](#id11 "Permalink to this heading")
+#### Values accepted[](#id13 "Permalink to this heading")
 
 The default value is 7. Valid values are 0-7.
 
@@ -198,7 +218,7 @@ The `NCCL_IB_GID_INDEX` variable defines the Global ID index used in RoCE mode. 
 
 For more information, see the InfiniBand specification Volume 1 or vendor documentation.
 
-#### Values accepted[](#id12 "Permalink to this heading")
+#### Values accepted[](#id14 "Permalink to this heading")
 
 The default value is -1.
 
@@ -208,7 +228,7 @@ The default value is -1.
 
 The `NCCL_IB_ADDR_FAMILY` variable defines the IP address family associated to the infiniband GID dynamically selected by NCCL when `NCCL_IB_GID_INDEX` is left unset.
 
-#### Values accepted[](#id13 "Permalink to this heading")
+#### Values accepted[](#id15 "Permalink to this heading")
 
 The default value is “AF_INET”.
 
@@ -218,7 +238,7 @@ The default value is “AF_INET”.
 
 The `NCCL_IB_ADDR_RANGE` variable defines the range of valid GIDs dynamically selected by NCCL when `NCCL_IB_GID_INDEX` is left unset.
 
-#### Values accepted[](#id14 "Permalink to this heading")
+#### Values accepted[](#id16 "Permalink to this heading")
 
 By default, ignored if unset.
 
@@ -230,7 +250,7 @@ GID ranges can be defined using the Classless Inter-Domain Routing (CIDR) format
 
 The `NCCL_IB_ROCE_VERSION_NUM` variable defines the RoCE version associated to the infiniband GID dynamically selected by NCCL when `NCCL_IB_GID_INDEX` is left unset.
 
-#### Values accepted[](#id15 "Permalink to this heading")
+#### Values accepted[](#id17 "Permalink to this heading")
 
 The default value is 2.
 
@@ -242,7 +262,7 @@ Defines the InfiniBand Service Level.
 
 For more information, see the InfiniBand specification Volume 1 or vendor documentation.
 
-#### Values accepted[](#id16 "Permalink to this heading")
+#### Values accepted[](#id18 "Permalink to this heading")
 
 The default value is 0.
 
@@ -254,7 +274,7 @@ Defines the InfiniBand traffic class field.
 
 For more information, see the InfiniBand specification Volume 1 or vendor documentation.
 
-#### Values accepted[](#id17 "Permalink to this heading")
+#### Values accepted[](#id19 "Permalink to this heading")
 
 The default value is 0.
 
@@ -264,7 +284,7 @@ The default value is 0.
 
 Defines the InfiniBand traffic class for control messages. Control messages are short RDMA write operations which control credit return, contrary to other RDMA operations transmitting large segments of data. This setting allows those messages to use a high priority, low-latency traffic class and avoid being delayed by the rest of the traffic.
 
-#### Values accepted[](#id18 "Permalink to this heading")
+#### Values accepted[](#id20 "Permalink to this heading")
 
 The default value is the traffic class set by NCCL_IB_TC, which defaults to 0 if not set.
 
@@ -274,7 +294,7 @@ The default value is the traffic class set by NCCL_IB_TC, which defaults to 0 if
 
 IB events are reported to the user as warnings. If enabled, NCCL will also stop IB communications upon fatal IB asynchronous events.
 
-#### Values accepted[](#id19 "Permalink to this heading")
+#### Values accepted[](#id21 "Permalink to this heading")
 
 The default value is 1, set to 0 to disable
 
@@ -282,7 +302,7 @@ The default value is 1, set to 0 to disable
 
 (since 2.23) The variable `NCCL_OOB_NET_ENABLE` enables the use of NCCL net for out-of-band communications. Enabling the usage of NCCL net will change the implementation of the allgather performed during the communicator initialization.
 
-#### Values accepted[](#id20 "Permalink to this heading")
+#### Values accepted[](#id22 "Permalink to this heading")
 
 Set the variable to 0 to disable, and to 1 to enable.
 
@@ -290,7 +310,7 @@ Set the variable to 0 to disable, and to 1 to enable.
 
 (since 2.23) If NCCL net is enabled for out-of-band communication (see `NCCL_OOB_NET_ENABLE`), the `NCCL_OOB_NET_IFNAME` variable specifies which network interfaces to use.
 
-#### Values accepted[](#id21 "Permalink to this heading")
+#### Values accepted[](#id23 "Permalink to this heading")
 
 Define to filter interfaces to be used by NCCL for out-of-band communications. The list of accepted interface depends on the network used by NCCL. The list is comma-separated; port numbers can be specified using the `:` symbol. An optional prefix `^` indicates the list is an exclude list. A second optional prefix `=` indicates that the tokens are exact names, otherwise by default NCCL would treat each token as a prefix. If multiple devices are specified, NCCL will select the first matching device in the list.
 
@@ -308,7 +328,7 @@ Example:
 
 For example, if we have 128 NCCL ranks, 1 ncclUniqueId, and a threshold at 64, staggering is performed. However, if 2 ncclUniqueIds are used with 128 NCCL ranks and a threshold at 64, no staggering is done.
 
-#### Values accepted[](#id22 "Permalink to this heading")
+#### Values accepted[](#id24 "Permalink to this heading")
 
 The value of `NCCL_UID_STAGGER_THRESHOLD` must be a strictly positive integer. If unspecified, the default value is 256.
 
@@ -318,7 +338,7 @@ The value of `NCCL_UID_STAGGER_THRESHOLD` must be a strictly positive integer. I
 
 The `NCCL_UID_STAGGER_RATE` variable is used to define the message rate targeted when staggering the communications between NCCL ranks and the ncclUniqueId. If staggering is used (see NCCL_UID_STAGGER_THRESHOLD above), the message rate is used to compute the time a given NCCL rank has to wait.
 
-#### Values accepted[](#id23 "Permalink to this heading")
+#### Values accepted[](#id25 "Permalink to this heading")
 
 The value of `NCCL_UID_STAGGER_RATE` must be a strictly positive integer, expressed in messages/second. If unspecified, the default value is 7000.
 
@@ -328,7 +348,7 @@ The value of `NCCL_UID_STAGGER_RATE` must be a strictly positive integer, expres
 
 Forces NCCL to use a specific network, for example to make sure NCCL uses an external plugin and doesn’t automatically fall back on the internal IB or Socket implementation. Setting this environment variable will override the `netName` configuration in all communicators (see [ncclConfig_t](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/types.html#ncclconfig)); if not set (undefined), the network module will be determined by the configuration; if not passing configuration, NCCL will automatically choose the best network module.
 
-#### Values accepted[](#id24 "Permalink to this heading")
+#### Values accepted[](#id26 "Permalink to this heading")
 
 The value of NCCL_NET has to match exactly the name of the NCCL network used (case-insensitive). Internal network names are “IB” (generic IB verbs) and “Socket” (TCP/IP sockets). External network plugins define their own names. Default value is undefined.
 
@@ -350,7 +370,7 @@ Set it to either a suffix string or to a library name to choose among multiple N
 
 For example, setting `NCCL_NET_PLUGIN=foo` will cause NCCL to try to load `foo` and, if `foo` cannot be found, `libnccl-net-foo.so` (provided that it exists on the system).
 
-#### Values accepted[](#id25 "Permalink to this heading")
+#### Values accepted[](#id27 "Permalink to this heading")
 
 Plugin suffix, plugin file name, or “none”.
 
@@ -372,7 +392,7 @@ Set it to either a suffix string or to a library name to choose among multiple N
 
 For example, setting `NCCL_TUNER_PLUGIN=foo` will cause NCCL to try to load `foo` and, if `foo` cannot be found, `libnccl-tuner-foo.so` (provided that it exists on the system).
 
-#### Values accepted[](#id26 "Permalink to this heading")
+#### Values accepted[](#id28 "Permalink to this heading")
 
 Plugin suffix, plugin file name, or “none”.
 
@@ -394,7 +414,7 @@ Set it to either a suffix string or to a library name to choose among multiple N
 
 For example, setting `NCCL_PROFILER_PLUGIN=foo` will cause NCCL to try to load `foo` and, if `foo` cannot be found, `libnccl-profiler-foo.so` (provided that it exists on the system).
 
-#### Values accepted[](#id27 "Permalink to this heading")
+#### Values accepted[](#id29 "Permalink to this heading")
 
 Plugin suffix, plugin file name, or “none”.
 
@@ -416,7 +436,7 @@ The `NCCL_ENV_PLUGIN` variable can be used to let NCCL load an external environm
   * If no plugin was found (neither user defined nor default) or the variable is set to “none”, use the internal environment plugin.
 
 
-#### Values accepted[](#id28 "Permalink to this heading")
+#### Values accepted[](#id30 "Permalink to this heading")
 
 Plugin library name (e.g., `/path/to/library/libfoo.so`), suffix (e.g., `foo`), or “none”.
 
@@ -426,7 +446,7 @@ Plugin library name (e.g., `/path/to/library/libfoo.so`), suffix (e.g., `foo`), 
 
 The `NCCL_IGNORE_CPU_AFFINITY` variable can be used to cause NCCL to ignore the job’s supplied CPU affinity and instead use the GPU affinity only.
 
-#### Values accepted[](#id29 "Permalink to this heading")
+#### Values accepted[](#id31 "Permalink to this heading")
 
 The default is 0, set to 1 to cause NCCL to ignore the job’s supplied CPU affinity.
 
@@ -436,7 +456,7 @@ The default is 0, set to 1 to cause NCCL to ignore the job’s supplied CPU affi
 
 The `NCCL_CONF_FILE` variable allows the user to specify a file with the static configuration. This does not accept the `~` character as part of the path; please convert to a relative or absolute path first.
 
-#### Values accepted[](#id30 "Permalink to this heading")
+#### Values accepted[](#id32 "Permalink to this heading")
 
 If unset or if the version is prior to 2.23, NCCL uses .nccl.conf in the home directory if available.
 
@@ -444,7 +464,7 @@ If unset or if the version is prior to 2.23, NCCL uses .nccl.conf in the home di
 
 The `NCCL_DEBUG` variable controls the debug information that is displayed from NCCL. This variable is commonly used for debugging.
 
-#### Values accepted[](#id32 "Permalink to this heading")
+#### Values accepted[](#id34 "Permalink to this heading")
 
 VERSION - Prints the NCCL version at the start of the program.
 
@@ -460,7 +480,7 @@ TRACE - Prints replayable trace information on every call.
 
 The `NCCL_DEBUG_FILE` variable directs the NCCL debug logging output to a file. The filename format can be set to _filename.%h.%p_ where _%h_ is replaced with the hostname and _%p_ is replaced with the process PID. This does not accept the `~` character as part of the path, please convert to a relative or absolute path first.
 
-#### Values accepted[](#id33 "Permalink to this heading")
+#### Values accepted[](#id36 "Permalink to this heading")
 
 The default output file is _stdout_ unless this environment variable is set. The filename can also be set to `/dev/stdout` or `/dev/stderr` to direct NCCL debug logging output to those predefined I/O streams. This also has the effect of making the output line buffered.
 
@@ -476,11 +496,11 @@ The `NCCL_DEBUG_SUBSYS` variable allows the user to filter the `NCCL_DEBUG=INFO`
 
 Prefixing the subsystem name with ‘^’ will disable the logging for that subsystem.
 
-#### Values accepted[](#id34 "Permalink to this heading")
+#### Values accepted[](#id38 "Permalink to this heading")
 
 The default value is INIT,BOOTSTRAP,ENV.
 
-Supported subsystem names are INIT (stands for initialization), COLL (stands for collectives), P2P (stands for peer-to-peer), SHM (stands for shared memory), NET (stands for network), GRAPH (stands for topology detection and graph search), TUNING (stands for algorithm/protocol tuning), ENV (stands for environment settings), ALLOC (stands for memory allocations), CALL (stands for function calls), PROXY (stands for the proxy thread operations), NVLS (stands for NVLink SHARP), BOOTSTRAP (stands for early initialization), REG (stands for memory registration), PROFILE (stands for coarse-grained profiling of initialization), RAS (stands for reliability, availability, and serviceability subsystem) and ALL (includes every subsystem).
+Supported subsystem names are INIT (stands for initialization), COLL (stands for collectives), P2P (stands for peer-to-peer), SHM (stands for shared memory), NET (stands for network), GRAPH (stands for topology detection and graph search), TUNING (stands for algorithm/protocol tuning), ENV (stands for environment settings), ALLOC (non-host memory allocations, typically device-side), ALLOC_HOST (host memory allocations), CALL (stands for function calls), PROXY (stands for the proxy thread operations), NVLS (stands for NVLink SHARP), BOOTSTRAP (stands for early initialization), REG (stands for memory registration), PROFILE (stands for coarse-grained profiling of initialization), RAS (stands for reliability, availability, and serviceability subsystem), DESTROY (stands for communicator destroy, abort, revoke, and plugin unload/close operations) and ALL (includes every subsystem).
 
 ### NCCL_DEBUG_TIMESTAMP_FORMAT[](#nccl-debug-timestamp-format "Permalink to this heading")
 
@@ -506,7 +526,7 @@ In addition to conversion specifications supported by strftime, `%Xf` can be spe
 
 The `NCCL_DEBUG_TIMESTAMP_LEVELS` variable allows the user to set which log lines get a timestamp depending upon the level of the log.
 
-#### Value accepted[](#id35 "Permalink to this heading")
+#### Value accepted[](#id41 "Permalink to this heading")
 
 The value should be a comma separated list of the levels which should have the timestamp. Valid levels are: `VERSION`, `WARN`, `INFO`, `ABORT`, and `TRACE`. In addition, `ALL` can be used to turn it on for all levels. Setting it to an empty value disables it for all levels. If the value is prefixed with a caret (`^`) then the listed levels will NOT log a timestamp, and the rest will. The default is to enable timestamps for `WARN`, but disable it for the rest.
 
@@ -518,7 +538,7 @@ For example, `NCCL_DEBUG_TIMESTAMP_LEVELS=WARN,INFO,TRACE` will turn it on for w
 
 Enable the use of the CollNet plugin.
 
-#### Value accepted[](#id36 "Permalink to this heading")
+#### Value accepted[](#id42 "Permalink to this heading")
 
 Default is 0, define and set to 1 to use the CollNet plugin.
 
@@ -528,7 +548,7 @@ Default is 0, define and set to 1 to use the CollNet plugin.
 
 A threshold for the number of nodes below which CollNet will not be enabled.
 
-#### Value accepted[](#id37 "Permalink to this heading")
+#### Value accepted[](#id43 "Permalink to this heading")
 
 Default is 2, define and set to an integer.
 
@@ -538,7 +558,7 @@ Default is 2, define and set to an integer.
 
 The `NCCL_CTA_POLICY` variable allows the user to set the policy for the NCCL communicator.
 
-#### Value accepted[](#id38 "Permalink to this heading")
+#### Value accepted[](#id44 "Permalink to this heading")
 
 Set to `DEFAULT` (or `0`, legacy) to use `NCCL_CTA_POLICY_DEFAULT` policy (default). Set to `EFFICIENCY` (or `1`, legacy) to use `NCCL_CTA_POLICY_EFFICIENCY` policy. Set to `ZERO` (or `2`, legacy) to use `NCCL_CTA_POLICY_ZERO` policy.
 
@@ -552,7 +572,7 @@ For more explanation about NCCL policies, please see [NCCL Communicator CTA Poli
 
 The `NCCL_NETDEVS_POLICY` variable allows the user to set the policy for the assignment of network devices to the GPUs. For each GPU, NCCL detects automatically available network devices, taking into account their network bandwidth and the node topology.
 
-#### Value accepted[](#id39 "Permalink to this heading")
+#### Value accepted[](#id45 "Permalink to this heading")
 
 If set to `AUTO` (default), NCCL also takes into account the other GPUs in the same communicator in order to assign network devices. In specific scenarios, this policy might lead to different GPUs from different communicators sharing the same network devices, and therefore impacts performance.
 
@@ -560,15 +580,35 @@ If set to `MAX:N`, NCCL uses up to N of the network devices available to each GP
 
 If set to `ALL`, NCCL will use all the available network devices for each GPU, disregarding other GPUs.
 
+### NCCL_MULTI_RANK_GPU_ENABLE[](#nccl-multi-rank-gpu-enable "Permalink to this heading")
+
+(since 2.30) (experimental)
+
+The `NCCL_MULTI_RANK_GPU_ENABLE` variable allows NCCL to run with multiple ranks using the same GPU device (or partition if MloPart is enabled). Setting this variable does not in itself assign multiple ranks to a GPU. The application must still arrange for ranks to share a device.
+
+Each rank sharing a GPU allocates its own set of channels and associated resources. It is the user’s responsibility to ensure that there are enough resources (SM, memory, etc) on the device to accommodate the need of all the ranks. Failing to do so will result in a hang in NCCL. With the default configuration, NCCL should be able to run up to 2 ranks per GPU. We also encourage the users to use `NCCL_MAX_CTAS` to limit the number of channels per rank to prevent resource exhaustion.
+
+Finally, NVLS is currently not compatible with multiple ranks within the same communicator using the same GPU. If `NCCL_NVLS_ENABLE` is set to 1, communicator initialization will fail when multiple ranks per GPU are detected. If `NCCL_NVLS_ENABLE` is set to 2 (the default), NVLS will be silently disabled.
+
+Disclaimer: This is currently an experimental feature, and is still being tuned. It is not compatible with all configurations. It may exhaust resources and lock NCCL. If erroring or hanging, NCCL may benefit from lower limits on NCCL_MAX_CTAS and NCCL_NET_GDR_LEVEL=LOC.
+
+#### Values accepted[](#id46 "Permalink to this heading")
+
+0 (default): Multiple ranks per GPU is not allowed. Communicator initialization will fail if detected.
+
+1: Allow multiple ranks to use the same GPU device.
+
 ### NCCL_TOPO_FILE[](#nccl-topo-file "Permalink to this heading")
 
 (since 2.6)
 
 Path to an XML file to load before detecting the topology. By default, NCCL will load `/var/run/nvidia-topologyd/virtualTopology.xml` if present.
 
-#### Value accepted[](#id40 "Permalink to this heading")
+#### Value accepted[](#id47 "Permalink to this heading")
 
 A path to an accessible file describing part or all of the topology.
+
+Note: For multi-node NVLink systems, despite NCCL_TOPO_DUMP_FILE producing a file with the full NVLink domain topology, NCCL_TOPO_FILE should only include the single node topology.
 
 ### NCCL_TOPO_DUMP_FILE[](#nccl-topo-dump-file "Permalink to this heading")
 
@@ -576,9 +616,11 @@ A path to an accessible file describing part or all of the topology.
 
 Path to a file to dump the XML topology to after detection.
 
-#### Value accepted[](#id41 "Permalink to this heading")
+#### Value accepted[](#id48 "Permalink to this heading")
 
 A path to a file which will be created or overwritten.
+
+Note: For multi-node NVLink systems, the dumped file will contain the full NVLink domain topology.
 
 ### NCCL_SET_THREAD_NAME[](#nccl-set-thread-name "Permalink to this heading")
 
@@ -586,7 +628,7 @@ A path to a file which will be created or overwritten.
 
 Give more meaningful names to NCCL CPU threads to ease debugging and analysis.
 
-#### Value accepted[](#id42 "Permalink to this heading")
+#### Value accepted[](#id49 "Permalink to this heading")
 
 0 or 1. Default is 0 (disabled).
 
@@ -600,7 +642,7 @@ They are fine to use for experiments, or to debug a problem, but should generall
 
 The `NCCL_P2P_DISABLE` variable disables the peer to peer (P2P) transport, which uses CUDA direct access between GPUs, using NVLink or PCI.
 
-#### Values accepted[](#id43 "Permalink to this heading")
+#### Values accepted[](#id50 "Permalink to this heading")
 
 Define and set to 1 to disable direct GPU-to-GPU (P2P) communication.
 
@@ -612,7 +654,7 @@ The `NCCL_P2P_LEVEL` variable allows the user to finely control when to use the 
 
 If this isn’t specified, NCCL will attempt to optimally select a value based on the architecture and environment it’s run in.
 
-#### Values accepted[](#id44 "Permalink to this heading")
+#### Values accepted[](#id51 "Permalink to this heading")
 
   * LOC : Never use P2P (always disabled)
 
@@ -650,7 +692,7 @@ Values greater than 4 will be interpreted as SYS. NVL is not supported using the
 
 The `NCCL_P2P_DIRECT_DISABLE` variable forbids NCCL to directly access user buffers through P2P between GPUs of the same process. This is useful when user buffers are allocated with APIs which do not automatically make them accessible to other GPUs managed by the same process and with P2P access.
 
-#### Values accepted[](#id45 "Permalink to this heading")
+#### Values accepted[](#id52 "Permalink to this heading")
 
 Define and set to 1 to disable direct user buffer access across GPUs.
 
@@ -658,7 +700,7 @@ Define and set to 1 to disable direct user buffer access across GPUs.
 
 The `NCCL_SHM_DISABLE` variable disables the Shared Memory (SHM) transports. SHM is used between devices when peer-to-peer cannot happen, therefore, host memory is used. NCCL will use the network (i.e. InfiniBand or IP sockets) to communicate between the CPU sockets when SHM is disabled.
 
-#### Values accepted[](#id46 "Permalink to this heading")
+#### Values accepted[](#id53 "Permalink to this heading")
 
 Define and set to 1 to disable communication through shared memory (SHM).
 
@@ -668,7 +710,7 @@ The `NCCL_BUFFSIZE` variable controls the size of the buffer used by NCCL when c
 
 Use this variable if you encounter memory constraint issues when using NCCL or you think that a different buffer size would improve performance.
 
-#### Values accepted[](#id47 "Permalink to this heading")
+#### Values accepted[](#id54 "Permalink to this heading")
 
 The default is 4194304 (4 MiB).
 
@@ -682,7 +724,7 @@ Use this variable if you think your GPU clocks are low and you want to increase 
 
 You can also use this variable to reduce the number of threads to decrease the GPU workload.
 
-#### Values accepted[](#id48 "Permalink to this heading")
+#### Values accepted[](#id55 "Permalink to this heading")
 
 The default is 512 for recent generation GPUs, and 256 for some older generations.
 
@@ -698,7 +740,7 @@ The old `NCCL_MAX_NRINGS` variable (used until 2.4) still works as an alias in n
 
 This environment variable has been deprecated in favor of `NCCL_MAX_CTAS` which can also be set programmatically using [ncclCommInitRankConfig](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/comms.html#ncclcomminitrankconfig). If both are set then the most restrictive value (i.e., the lower value) is used.
 
-#### Values accepted[](#id49 "Permalink to this heading")
+#### Values accepted[](#id56 "Permalink to this heading")
 
 Any value above or equal to 1.
 
@@ -716,7 +758,7 @@ Note that for small message sizes it is possible that NCCL will use fewer channe
 
 This environment variable has been deprecated in favor of `NCCL_MIN_CTAS` which can also be set programmatically using [ncclCommInitRankConfig](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/comms.html#ncclcomminitrankconfig). If both are set then the most restrictive value (i.e., the higher value) is used.
 
-#### Values accepted[](#id50 "Permalink to this heading")
+#### Values accepted[](#id57 "Permalink to this heading")
 
 The default is platform dependent. Set to an integer value, up to 12 (up to 2.2), 16 (2.3 and 2.4) or 32 (2.5 and later).
 
@@ -726,17 +768,17 @@ The default is platform dependent. Set to an integer value, up to 12 (up to 2.2)
 
 The `NCCL_CHECKS_DISABLE` variable can be used to disable argument checks on each collective call. Checks are useful during development but can increase the latency. They can be disabled to improve performance in production.
 
-#### Values accepted[](#id51 "Permalink to this heading")
+#### Values accepted[](#id58 "Permalink to this heading")
 
 The default is 0, set to 1 to disable checks.
 
 ### NCCL_CHECK_POINTERS[](#nccl-check-pointers "Permalink to this heading")
 
-(since 2.2.12, deprecated in 2.29.4)
+(since 2.2.12, deprecated in 2.29.7)
 
 The `NCCL_CHECK_POINTERS` variable enables checking of the CUDA memory pointers on each collective call. Checks are useful during development but can increase the latency. Replaced by `NCCL_CHECK_MODE=DEBUG_LOCAL` and may be removed in future versions.
 
-#### Values accepted[](#id52 "Permalink to this heading")
+#### Values accepted[](#id59 "Permalink to this heading")
 
 The default is 0, set to 1 to enable checking.
 
@@ -744,11 +786,11 @@ Setting to 1 restores the original behavior of NCCL prior to 2.2.12.
 
 ### NCCL_CHECK_MODE[](#nccl-check-mode "Permalink to this heading")
 
-(since 2.29.4)
+(since 2.29.7)
 
 The `NCCL_CHECK_MODE` variable controls the mode of checking the input arguments.
 
-#### Values accepted[](#id53 "Permalink to this heading")
+#### Values accepted[](#id60 "Permalink to this heading")
 
   * DEFAULT: don’t check the input arguments.
 
@@ -765,7 +807,7 @@ The default is `DEFAULT`.
 
 The `NCCL_LAUNCH_MODE` variable controls how NCCL launches CUDA kernels.
 
-#### Values accepted[](#id54 "Permalink to this heading")
+#### Values accepted[](#id61 "Permalink to this heading")
 
 The default value is PARALLEL.
 
@@ -775,7 +817,7 @@ Setting is to GROUP will use cooperative groups (CUDA 9.0 and later) for process
 
 The `NCCL_IB_DISABLE` variable prevents the IB/RoCE transport from being used by NCCL. Instead, NCCL will fall back to using IP sockets.
 
-#### Values accepted[](#id55 "Permalink to this heading")
+#### Values accepted[](#id62 "Permalink to this heading")
 
 Define and set to 1 to disable the use of InfiniBand Verbs for communication (and force another method, e.g. IP sockets).
 
@@ -785,11 +827,21 @@ Define and set to 1 to disable the use of InfiniBand Verbs for communication (an
 
 Threshold above which we send InfiniBand data in a separate message which can leverage adaptive routing.
 
-#### Values accepted[](#id56 "Permalink to this heading")
+#### Values accepted[](#id63 "Permalink to this heading")
 
 Size in bytes, the default value is 8192.
 
 Setting it above NCCL_BUFFSIZE will disable the use of adaptive routing completely.
+
+### NCCL_IB_OOO_RQ[](#nccl-ib-ooo-rq "Permalink to this heading")
+
+(since 2.30)
+
+Allowing Receive WRs on the receiver side of the QP to be consumed out-of-order.
+
+#### Values accepted[](#id64 "Permalink to this heading")
+
+Disabled (0) by default. Set to 1 to force enable out-of-order consumption of Receive WRs on receiver side.
 
 ### NCCL_IB_QPS_PER_CONNECTION[](#nccl-ib-qps-per-connection "Permalink to this heading")
 
@@ -797,7 +849,7 @@ Setting it above NCCL_BUFFSIZE will disable the use of adaptive routing complete
 
 Number of IB queue pairs to use for each connection between two ranks. This can be useful on multi-level fabrics which need multiple queue pairs to have good routing entropy. See `NCCL_IB_SPLIT_DATA_ON_QPS` for different ways to split data on multiple QPs, as it can affect performance.
 
-#### Values accepted[](#id57 "Permalink to this heading")
+#### Values accepted[](#id65 "Permalink to this heading")
 
 Number between 1 and 128, default is 1.
 
@@ -807,7 +859,7 @@ Number between 1 and 128, default is 1.
 
 This parameter controls how we use the queue pairs when we create more than one. Set to 1 (split mode), each message will be split evenly on each queue pair. This may cause a visible latency degradation if many QPs are used. Set to 0 (round-robin mode), queue pairs will be used in round-robin mode for each message we send. Operations which do not send multiple messages will not use all QPs.
 
-#### Values accepted[](#id58 "Permalink to this heading")
+#### Values accepted[](#id66 "Permalink to this heading")
 
 0 or 1. Default is 0 (since NCCL 2.20). Setting it to 1 will enable split mode (default in 2.18 and 2.19).
 
@@ -817,7 +869,7 @@ This parameter controls how we use the queue pairs when we create more than one.
 
 The `NCCL_IB_CUDA_SUPPORT` variable is used to force or disable the usage of GPU Direct RDMA. By default, NCCL enables GPU Direct RDMA if the topology permits it. This variable can disable this behavior or force the usage of GPU Direct RDMA in all cases.
 
-#### Values accepted[](#id59 "Permalink to this heading")
+#### Values accepted[](#id67 "Permalink to this heading")
 
 Define and set to 0 to disable GPU Direct RDMA.
 
@@ -829,7 +881,7 @@ Define and set to 1 to force the usage of GPU Direct RDMA.
 
 Enable the use of Relaxed Ordering for the IB Verbs transport. Relaxed Ordering can greatly help the performance of InfiniBand networks in virtualized environments.
 
-#### Values accepted[](#id60 "Permalink to this heading")
+#### Values accepted[](#id68 "Permalink to this heading")
 
 Set to 2 to automatically use Relaxed Ordering if available. Set to 1 to force the use of Relaxed Ordering and fail if not available. Set to 0 to disable the use of Relaxed Ordering. Default is 2.
 
@@ -839,7 +891,7 @@ Set to 2 to automatically use Relaxed Ordering if available. Set to 1 to force t
 
 Enable the use of Adaptive Routing capable data transfers for the IB Verbs transport. Adaptive routing can improve the performance of communications at scale. A system defined Adaptive Routing enabled SL has to be selected accordingly (cf. `NCCL_IB_SL`).
 
-#### Values accepted[](#id61 "Permalink to this heading")
+#### Values accepted[](#id69 "Permalink to this heading")
 
 Enabled (1) by default on IB networks. Disabled (0) by default on RoCE networks. Set to 1 to force use of Adaptive Routing capable data transmission.
 
@@ -849,7 +901,7 @@ Enabled (1) by default on IB networks. Disabled (0) by default on RoCE networks.
 
 Enable the use of Enhanced Connection Establishment (ECE) on IB/RoCE Verbs networks. ECE can be used to enable advanced networking features such as Congestion Control, Adaptive Routing and Selective Repeat. Note: These parameters are not interpreted or controlled by NCCL and are passed through directly to the HCAs via the ECE mechanism.
 
-#### Values accepted[](#id62 "Permalink to this heading")
+#### Values accepted[](#id70 "Permalink to this heading")
 
 Enabled (1) by default (since 2.19). Set to 0 to disable use of ECE network capabilities.
 
@@ -861,7 +913,7 @@ Note: Incorrect configuration of the ECE parameters on a system can adversely af
 
 Sets the default Memory Sync Domain for NCCL kernels (CUDA 12.0 & sm90 and later). Memory Sync Domains can help eliminate interference between the NCCL kernels and the application compute kernels, when they use different domains.
 
-#### Values accepted[](#id63 "Permalink to this heading")
+#### Values accepted[](#id71 "Permalink to this heading")
 
 Default value is `cudaLaunchMemSyncDomainRemote` (1). Currently supported values are 0 and 1.
 
@@ -871,7 +923,7 @@ Default value is `cudaLaunchMemSyncDomainRemote` (1). Currently supported values
 
 Use CUDA cuMem* functions to allocate memory in NCCL.
 
-#### Values accepted[](#id64 "Permalink to this heading")
+#### Values accepted[](#id72 "Permalink to this heading")
 
 0 or 1. Default is 0 in 2.18 (disabled); since 2.19 this feature is auto-enabled by default if the system supports it (NCCL_CUMEM_ENABLE can still be used to override the autodetection).
 
@@ -879,9 +931,9 @@ Use CUDA cuMem* functions to allocate memory in NCCL.
 
 (since 2.23)
 
-Use CUDA cuMem* functions to allocate host memory in NCCL. See [Shared memory](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting.html#cumem-host-allocations) for more information.
+Use CUDA cuMem* functions to allocate host memory in NCCL. See [Shared memory](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/runtime_and_mpi_issues.html#cumem-host-allocations) for more information.
 
-#### Values accepted[](#id65 "Permalink to this heading")
+#### Values accepted[](#id73 "Permalink to this heading")
 
 0 or 1. Default is 0 in 2.23; since 2.24, default is 1 if CUDA driver >= 12.6, CUDA runtime >= 12.2, and cuMem host allocations are supported.
 
@@ -893,7 +945,7 @@ The `NCCL_NET_GDR_LEVEL` variable allows the user to finely control when to use 
 
 If this isn’t specified, NCCL will attempt to optimally select a value based on the architecture and environment it’s run in.
 
-#### Values accepted[](#id66 "Permalink to this heading")
+#### Values accepted[](#id74 "Permalink to this heading")
 
   * LOC : Never use GPU Direct RDMA (always disabled).
 
@@ -906,7 +958,7 @@ If this isn’t specified, NCCL will attempt to optimally select a value based o
   * SYS : Use GPU Direct RDMA even across the SMP interconnect between NUMA nodes (e.g., QPI/UPI) (always enabled).
 
 
-#### Integer Values (Legacy)[](#id67 "Permalink to this heading")
+#### Integer Values (Legacy)[](#id75 "Permalink to this heading")
 
 There is also the option to declare `NCCL_NET_GDR_LEVEL` as an integer corresponding to the path type. These numerical values were kept for retro-compatibility, for those who used numerical values before strings were allowed.
 
@@ -931,7 +983,7 @@ Values greater than 4 will be interpreted as SYS.
 
 The `NCCL_NET_GDR_C2C` variable enables GPU Direct RDMA when sending data via a NIC attached to a CPU (i.e. distance PHB) where the CPU is connected to the GPU via a C2C interconnect. This effectively overrides the `NCCL_NET_GDR_LEVEL` setting for this particular NIC.
 
-#### Values accepted[](#id68 "Permalink to this heading")
+#### Values accepted[](#id76 "Permalink to this heading")
 
 0 or 1. Define and set to 1 to use GPU Direct RDMA to send data to the NIC directly via C2C connected CPUs.
 
@@ -943,7 +995,7 @@ The `NCCL_NET_GDR_READ` variable enables GPU Direct RDMA when sending data as lo
 
 Note: Reading directly from GPU memory when sending data is known to be slightly slower than reading from CPU memory on some platforms, such as PCI-E.
 
-#### Values accepted[](#id69 "Permalink to this heading")
+#### Values accepted[](#id77 "Permalink to this heading")
 
 0 or 1. Define and set to 1 to use GPU Direct RDMA to send data to the NIC directly (bypassing CPU).
 
@@ -955,7 +1007,7 @@ Before 2.4.2, the default value is 0 for all platforms. Since 2.4.2, the default
 
 Allows the usage of shared buffers for inter-node point-to-point communication. This will use a single large pool for all remote peers, having a constant memory usage instead of increasing linearly with the number of remote peers.
 
-#### Value accepted[](#id70 "Permalink to this heading")
+#### Value accepted[](#id78 "Permalink to this heading")
 
 Default is 1 (enabled). Set to 0 to disable.
 
@@ -965,9 +1017,29 @@ Default is 1 (enabled). Set to 0 to disable.
 
 Reuse the same connections in the context of PXN. This allows for message aggregation but can also decrease the entropy of network packets.
 
-#### Value accepted[](#id71 "Permalink to this heading")
+#### Value accepted[](#id79 "Permalink to this heading")
 
 Default is 1 (enabled). Set to 0 to disable.
+
+### NCCL_IGNORE_NET_MISMATCH[](#nccl-ignore-net-mismatch "Permalink to this heading")
+
+(since 2.30)
+
+The `NCCL_IGNORE_NET_MISMATCH` variable controls whether NCCL should fail initialization when it detects mismatched Net (network) device counts across ranks. By default, NCCL will ignore Net device count mismatches, but setting this to 0 will cause NCCL to fail initialization if some ranks have access to fewer Net devices than others.
+
+#### Values accepted[](#id80 "Permalink to this heading")
+
+Default is 1 (ignore mismatch). Set to 0 to fail on Net device count mismatches.
+
+### NCCL_IGNORE_COLLNET_MISMATCH[](#nccl-ignore-collnet-mismatch "Permalink to this heading")
+
+(since 2.30)
+
+The `NCCL_IGNORE_COLLNET_MISMATCH` variable controls whether NCCL should fail initialization when it detects mismatched CollNet (collective network) device counts across ranks. By default, NCCL will fail with a system error if some ranks have access to fewer CollNet devices than others, as this typically indicates a misconfiguration that can lead to failures.
+
+#### Values accepted[](#id81 "Permalink to this heading")
+
+Default is 0 (fail on mismatch). Set to 1 to ignore CollNet device count mismatches and continue with initialization.
 
 ### NCCL_SINGLE_RING_THRESHOLD[](#nccl-single-ring-threshold "Permalink to this heading")
 
@@ -975,7 +1047,7 @@ Default is 1 (enabled). Set to 0 to disable.
 
 The `NCCL_SINGLE_RING_THRESHOLD` variable sets the limit under which NCCL will only use one ring. This will limit bandwidth but improve latency.
 
-#### Values accepted[](#id72 "Permalink to this heading")
+#### Values accepted[](#id82 "Permalink to this heading")
 
 The default value is 262144 (256kB) on GPUs with compute capability 7 and above. Otherwise, the default value is 131072 (128kB).
 
@@ -987,7 +1059,7 @@ Values are integers, in bytes.
 
 The `NCCL_LL_THRESHOLD` variable sets the size limit under which NCCL uses low-latency algorithms.
 
-#### Values accepted[](#id73 "Permalink to this heading")
+#### Values accepted[](#id83 "Permalink to this heading")
 
 The default is 16384 (up to 2.2) or is dependent on the number of ranks (2.3 and later).
 
@@ -999,7 +1071,7 @@ Values are integers, in bytes.
 
 The `NCCL_TREE_THRESHOLD` variable sets the size limit under which NCCL uses tree algorithms instead of rings.
 
-#### Values accepted[](#id74 "Permalink to this heading")
+#### Values accepted[](#id84 "Permalink to this heading")
 
 The default is dependent on the number of ranks.
 
@@ -1011,7 +1083,7 @@ Values are integers, in bytes.
 
 The `NCCL_ALGO` variable defines which algorithms NCCL will use.
 
-#### Values accepted[](#id75 "Permalink to this heading")
+#### Values accepted[](#id85 "Permalink to this heading")
 
 (since 2.5)
 
@@ -1052,7 +1124,7 @@ The `NCCL_PROTO` variable defines which protocol(s) NCCL will be allowed to use.
 
 Users are discouraged from setting this variable, with the exception of disabling a specific protocol in case a bug in NCCL is suspected. In particular, enabling LL128 on platforms that don’t support it can lead to data corruption.
 
-#### Values accepted[](#id76 "Permalink to this heading")
+#### Values accepted[](#id86 "Permalink to this heading")
 
 (since 2.5) Comma-separated list of protocols (not case sensitive) among: `LL`, `LL128`, and `Simple`. To specify protocols to exclude (instead of to include), start the list with `^`.
 
@@ -1066,7 +1138,7 @@ The default behavior enables all supported algorithms: equivalent to `LL,LL128,S
 
 Disable intra-node communication through NVLink via an intermediate GPU.
 
-#### Value accepted[](#id77 "Permalink to this heading")
+#### Value accepted[](#id87 "Permalink to this heading")
 
 Default is 0, set to 1 to disable this mechanism.
 
@@ -1076,7 +1148,7 @@ Default is 0, set to 1 to disable this mechanism.
 
 Disable inter-node communication using a non-local NIC, using NVLink and an intermediate GPU.
 
-#### Value accepted[](#id78 "Permalink to this heading")
+#### Value accepted[](#id88 "Permalink to this heading")
 
 Default is 0, set to 1 to disable this mechanism.
 
@@ -1086,7 +1158,7 @@ Default is 0, set to 1 to disable this mechanism.
 
 Control in which cases PXN is used for send/receive operations.
 
-#### Value accepted[](#id79 "Permalink to this heading")
+#### Value accepted[](#id89 "Permalink to this heading")
 
 A value of 0 will disable the use of PXN for send/receive. A value of 1 will enable the use of PXN when the NIC preferred by the destination is not accessible through PCI switches. A value of 2 (default) will cause PXN to always be used, even if the NIC is connected through PCI switches, storing data from all GPUs within the node on an intermediate GPU to maximize aggregation.
 
@@ -1096,7 +1168,7 @@ A value of 0 will disable the use of PXN for send/receive. A value of 1 will ena
 
 Allow NCCL to use the PXN mechanism if the peer GPU is connected through C2C + PCIe to the targeted NIC.
 
-#### Value accepted[](#id80 "Permalink to this heading")
+#### Value accepted[](#id90 "Permalink to this heading")
 
 Default is 1 (since NCCL 2.28; it was 0 in NCCL 2.27). Set to 1 to enable and to 0 to disable.
 
@@ -1106,7 +1178,7 @@ Default is 1 (since NCCL 2.28; it was 0 in NCCL 2.27). Set to 1 to enable and to
 
 Dynamically connect peers during runtime (e.g., calling ncclAllreduce()) instead of init stage.
 
-#### Value accepted[](#id81 "Permalink to this heading")
+#### Value accepted[](#id91 "Permalink to this heading")
 
 Default is 1, set to 0 to connect peers at init stage.
 
@@ -1118,9 +1190,13 @@ Enable user buffer registration when NCCL calls are captured by CUDA Graphs.
 
 Effective only when: (i) the CollNet algorithm is being used; (ii) all GPUs within a node have P2P access to each other; (iii) there is at most one GPU per process.
 
+Warning
+
+Using multiple GPUs per process with CUDA graph capture may result in deadlocks under certain conditions. See [Using NCCL with CUDA Graphs](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/cudagraph.html#using-nccl-with-cuda-graphs) for details.
+
 User buffer registration may reduce the number of data copies between user buffers and the internal buffers of NCCL. The user buffers will be automatically de-registered when the CUDA Graphs are destroyed.
 
-#### Value accepted[](#id83 "Permalink to this heading")
+#### Value accepted[](#id93 "Permalink to this heading")
 
 0 or 1. Default value is 1 (enabled).
 
@@ -1130,7 +1206,7 @@ User buffer registration may reduce the number of data copies between user buffe
 
 Enable user local buffer registration when users explicitly call _ncclCommRegister_.
 
-#### Value accepted[](#id84 "Permalink to this heading")
+#### Value accepted[](#id94 "Permalink to this heading")
 
 0 or 1. Default value is 1 (enabled).
 
@@ -1140,7 +1216,7 @@ Enable user local buffer registration when users explicitly call _ncclCommRegist
 
 Cuda buffers allocated through _cudaMalloc_ (and related memory allocators) are legacy buffers. Registering legacy buffer can cause implicit synchronization, which is unsafe and can possibly cause a hang for NCCL. NCCL disables legacy buffer registration by default, and users should move to cuMem-based memory allocators for buffer registration.
 
-#### Value accepted[](#id85 "Permalink to this heading")
+#### Value accepted[](#id95 "Permalink to this heading")
 
 0 or 1. Default value is 0 (disabled).
 
@@ -1150,7 +1226,7 @@ Cuda buffers allocated through _cudaMalloc_ (and related memory allocators) are 
 
 Enable window memory registration.
 
-#### Value accepted[](#id86 "Permalink to this heading")
+#### Value accepted[](#id96 "Permalink to this heading")
 
 0 or 1. Default value is 1 (enabled).
 
@@ -1162,7 +1238,7 @@ Set CUDA kernel stack size to the maximum stack size amongst all NCCL kernels.
 
 It may avoid a CUDA memory reconfiguration on load. Set to 1 if you experience hang due to CUDA memory reconfiguration.
 
-#### Value accepted[](#id87 "Permalink to this heading")
+#### Value accepted[](#id97 "Permalink to this heading")
 
 0 or 1. Default value is 0 (disabled).
 
@@ -1179,7 +1255,40 @@ Enable/disable support for multiple outstanding NCCL calls from parallel CUDA gr
 
 The ability to disable support is motivated by observed hangs in the CUDA launches when support is enabled and multiple ranks have work launched via cudaGraphLaunch from the same thread.
 
-#### Value accepted[](#id89 "Permalink to this heading")
+#### Value accepted[](#id99 "Permalink to this heading")
+
+0 or 1. Default is 1 (enabled).
+
+### NCCL_GRAPH_STREAM_ORDERING[](#nccl-graph-stream-ordering "Permalink to this heading")
+
+(since 2.30)
+
+Allow applications to disable NCCL’s internal serialization of communication kernels during CUDA graph capture, as a performance optimization for capture-heavy workloads (for example, frameworks that re-capture graphs frequently or that wrap each collective in its own CUDA subgraph). This setting has no effect outside of CUDA graph capture.
+
+Warning
+
+`NCCL_GRAPH_STREAM_ORDERING=0` together with **graph mixing** (communicator `graphUsageMode=2`; see [ncclConfig_t](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/types.html#ncclconfig)) is **not supported**. If stream ordering is disabled for a communicator, **graph mixing must be off** —use `graphUsageMode` `0` or `1` (and note that [NCCL_GRAPH_MIXING_SUPPORT](#nccl-graph-mixing-support) `1` forces `graphUsageMode=2` at init, overriding an explicit lower mode). Workloads that require mixing must keep the default `1`. The same rule applies to per-communicator `graphStreamOrdering` `0`.
+
+When set to 1 (default), NCCL guarantees that communication kernels are executed in a serialized and deterministic order across graphs and communicators that share a GPU, with no ordering responsibility placed on the application.
+
+When set to 0, NCCL’s internal serialization guarantee is disabled and communication kernels are placed on the stream used to begin the graph capture. The application is responsible for ensuring correct ordering of communication kernels.
+
+The same bypass can be selected per communicator with the `graphStreamOrdering` field in [ncclConfig_t](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/types.html#ncclconfig). When that field is `0` or `1`, it overrides `NCCL_GRAPH_STREAM_ORDERING` for that communicator. Communicators on the same GPU may still set this option differently; NCCL does not order them with respect to each other in that case, so the application’s obligations below apply whenever the bypass is in effect for a communicator—see `graphStreamOrdering` for details.
+
+Application responsibilities
+
+With `NCCL_GRAPH_STREAM_ORDERING=0` (or `graphStreamOrdering` `0`), NCCL stops enforcing device-side serialization of communication kernels on the graph-capture path. The application must then guarantee:
+
+  1. **Serialization on the GPU.** NCCL operations must not overlap: at most one NCCL operation may execute on a given GPU at a time.
+
+  2. **Scope.** The rule applies across communicators, across different captured graphs, and between captured and uncaptured NCCL work. The ordering must hold at replay / execution, not only as expressed at capture time.
+
+  3. **How to satisfy it.** The simplest approach is to enqueue **all** NCCL operations on the **same CUDA stream**. Equivalent serialization can be achieved with device-wide synchronization and/or CUDA event dependencies between streams.
+
+
+Network (proxy) transports are unaffected by this setting; NCCL continues to provide its normal host-side ordering guarantees for those transports regardless of the value of `NCCL_GRAPH_STREAM_ORDERING`.
+
+#### Value accepted[](#id101 "Permalink to this heading")
 
 0 or 1. Default is 1 (enabled).
 
@@ -1191,7 +1300,7 @@ Enable GPU Direct RDMA buffer registration using the Linux dma-buf subsystem.
 
 The Linux dma-buf subsystem allows GPU Direct RDMA capable NICs to read and write CUDA buffers directly without CPU involvement.
 
-#### Value accepted[](#id90 "Permalink to this heading")
+#### Value accepted[](#id102 "Permalink to this heading")
 
 0 or 1. Default value is 1 (enabled), but the feature is automatically disabled if the Linux kernel or the CUDA/NIC driver do not support it.
 
@@ -1201,7 +1310,7 @@ The Linux dma-buf subsystem allows GPU Direct RDMA capable NICs to read and writ
 
 The `NCCL_P2P_NET_CHUNKSIZE` controls the size of messages sent through the network for ncclSend/ncclRecv operations.
 
-#### Values accepted[](#id91 "Permalink to this heading")
+#### Values accepted[](#id103 "Permalink to this heading")
 
 The default is 131072 (128 K).
 
@@ -1213,7 +1322,7 @@ Values are integers, in bytes. The recommendation is to use powers of 2, hence 2
 
 The `NCCL_P2P_LL_THRESHOLD` is the maximum message size that NCCL will use the LL protocol for P2P operations.
 
-#### Values accepted[](#id92 "Permalink to this heading")
+#### Values accepted[](#id104 "Permalink to this heading")
 
 Decimal number. Default is 16384.
 
@@ -1223,7 +1332,7 @@ Decimal number. Default is 16384.
 
 `NCCL_ALLOC_P2P_NET_LL_BUFFERS` instructs communicators to allocate dedicated LL buffers for all P2P network connections. This enables all ranks to use the LL protocol for latency-bound send and receive operations below `NCCL_P2P_LL_THRESHOLD` sizes. Intranode P2P transfers always have dedicated LL buffers allocated. If running all-to-all workloads with high numbers of ranks, this will result in a high scaling memory overhead.
 
-#### Values accepted[](#id93 "Permalink to this heading")
+#### Values accepted[](#id105 "Permalink to this heading")
 
 0 or 1. Default value is 0 (disabled).
 
@@ -1233,7 +1342,7 @@ Decimal number. Default is 16384.
 
 The `NCCL_COMM_BLOCKING` variable controls whether NCCL calls are allowed to block or not. This includes all calls to NCCL, including init/finalize functions, as well as communication functions which may also block due to the lazy initialization of connections for send/receive calls. Setting this environment variable will override the `blocking` configuration in all communicators (see [ncclConfig_t](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/types.html#ncclconfig)); if not set (undefined), communicator behavior will be determined by the configuration; if not passing configuration, communicators are blocking.
 
-#### Values accepted[](#id94 "Permalink to this heading")
+#### Values accepted[](#id106 "Permalink to this heading")
 
 0 or 1. 1 indicates blocking communicators, and 0 indicates nonblocking communicators. The default value is undefined.
 
@@ -1243,7 +1352,7 @@ The `NCCL_COMM_BLOCKING` variable controls whether NCCL calls are allowed to blo
 
 Set CUDA Cooperative Group Array (CGA) cluster size. On sm90 and later we have an extra level of hierarchy where we can group together several blocks within the Grid, called Thread Block Clusters. Setting this to non-zero will cause NCCL to launch the communication kernels with the Cluster Dimension attribute set accordingly. Setting this environment variable will override the `cgaClusterSize` configuration in all communicators (see [ncclConfig_t](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/types.html#ncclconfig)); if not set (undefined), CGA cluster size will be determined by the configuration; if not passing configuration, NCCL will automatically choose the best value.
 
-#### Values accepted[](#id95 "Permalink to this heading")
+#### Values accepted[](#id107 "Permalink to this heading")
 
 0 to 8. Default value is undefined.
 
@@ -1257,7 +1366,7 @@ Increasing the number of CTAs will consume more GPU resources but possibly incre
 
 This environment variable is the replacement for the deprecated environment variable `NCCL_MAX_NCHANNELS`. If both are set then the most restrictive value (i.e., the lower value) is used.
 
-#### Values accepted[](#id96 "Permalink to this heading")
+#### Values accepted[](#id108 "Permalink to this heading")
 
 Set to a positive integer value up to 64 (32 prior to 2.25). Default value is undefined.
 
@@ -1273,7 +1382,7 @@ This parameter is commonly used during benchmarking and testing to force a parti
 
 This environment variable is the replacement for the deprecated environment variable `NCCL_MIN_NCHANNELS`. If both are set then the most restrictive value (i.e., the higher value) is used.
 
-#### Values accepted[](#id97 "Permalink to this heading")
+#### Values accepted[](#id109 "Permalink to this heading")
 
 Set to a positive integer value up to 64 (32 prior to 2.25). Default value is undefined.
 
@@ -1283,7 +1392,7 @@ Set to a positive integer value up to 64 (32 prior to 2.25). Default value is un
 
 Enable the use of NVLink SHARP (NVLS). NVLink SHARP is available in third-generation NVSwitch systems (NVLink4) with Hopper and later GPU architectures, allowing collectives such as `ncclAllReduce` to be offloaded to the NVSwitch domain. The default value is 2.
 
-#### Values accepted[](#id98 "Permalink to this heading")
+#### Values accepted[](#id110 "Permalink to this heading")
 
 0: Disable the use of NVLink SHARP. No NVLink SHARP resources will be allocated.
 
@@ -1297,9 +1406,23 @@ Enable the use of NVLink SHARP (NVLS). NVLink SHARP is available in third-genera
 
 Enable NCCL to combine dual-port IB NICs into a single logical network device. This allows NCCL to more easily aggregate dual-port NIC bandwidth.
 
-#### Values accepted[](#id99 "Permalink to this heading")
+#### Values accepted[](#id111 "Permalink to this heading")
 
 Default is 1 (enabled), define and set to 0 to disable NIC merging
+
+### NCCL_NET_MERGE_POLICY[](#nccl-net-merge-policy "Permalink to this heading")
+
+(since 2.30.5)
+
+Controls how NCCL merges physical HCAs into a virtual HCA. The policy works on top of the existing topological distance-based fusion (see NCCL_NET_MERGE_LEVEL); it does not replace the existing distance logic, but can further constrain which candidates are eligible to be merged.
+
+Note: this is specifically intended for rail-optimized systems, where all physical HCAs are equally distant from the GPUs and distance-based logic could inadvertently merge devices from different rails into a single virtual device.
+
+#### Values accepted[](#id112 "Permalink to this heading")
+
+`ALL` : (Default) Merge all the devices at the given merge level (see NCCL_NET_MERGE_LEVEL) regardless of their rail assignment.
+
+`RAIL` : Merge only the devices at the given merge level (see NCCL_NET_MERGE_LEVEL) that share the same rail assignment. All devices with undefined rail assignment (`railId == -1`) will not be merged.
 
 ### NCCL_MNNVL_ENABLE[](#nccl-mnnvl-enable "Permalink to this heading")
 
@@ -1307,7 +1430,7 @@ Default is 1 (enabled), define and set to 0 to disable NIC merging
 
 Enable NCCL to use Multi-Node NVLink (MNNVL) when available. If the system or driver are not Multi-Node NVLink capable then MNNVL will automatically be disabled. This feature also requires NCCL CUMEM support (`NCCL_CUMEM_ENABLE`) to be enabled. MNNVL requires a fully configured and operational IMEX domain for all the nodes that form the NVLink domain. See the CUDA documentation for more details on IMEX domains.
 
-#### Values accepted[](#id100 "Permalink to this heading")
+#### Values accepted[](#id113 "Permalink to this heading")
 
 0: Disable MNNVL support.
 
@@ -1319,7 +1442,7 @@ Enable NCCL to use Multi-Node NVLink (MNNVL) when available. If the system or dr
 
 (since 2.25) Can be used to set the Multi-Node NVLink (MNNVL) UUID to a user defined value. The supplied value will be assigned to both the upper and lower 64-bit words of the 128-bit UUID. Normally the MNNVL UUID is assigned by the Fabric Manager, and it should not need to be overridden.
 
-#### Values accepted[](#id101 "Permalink to this heading")
+#### Values accepted[](#id114 "Permalink to this heading")
 
 64-bit integer value.
 
@@ -1327,7 +1450,7 @@ Enable NCCL to use Multi-Node NVLink (MNNVL) when available. If the system or dr
 
 (since 2.25) Can be used to set the Multi-Node NVLink (MNNVL) Clique Id to a user defined value. Normally the Clique Id is assigned by the Fabric Manager, but this environment variable can be used to “soft” partition MNNVL jobs. i.e. NCCL will only treat ranks with the same <UUID,CLIQUE_ID> as being part of the same NVLink domain.
 
-#### Values accepted[](#id102 "Permalink to this heading")
+#### Values accepted[](#id115 "Permalink to this heading")
 
 32-bit integer value.
 
@@ -1337,7 +1460,7 @@ Enable NCCL to use Multi-Node NVLink (MNNVL) when available. If the system or dr
 
 Enable NCCL’s reliability, availability, and serviceability (RAS) subsystem, which can be used to query the health of NCCL jobs during execution (see [RAS](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/ras.html)).
 
-#### Values accepted[](#id103 "Permalink to this heading")
+#### Values accepted[](#id116 "Permalink to this heading")
 
 Default is 1 (enabled); define and set to 0 to disable RAS.
 
@@ -1347,7 +1470,7 @@ Default is 1 (enabled); define and set to 0 to disable RAS.
 
 Specify the IP address and port number of a socket that the RAS subsystem will listen on for client connections. RAS can share this socket between multiple processes but that would not be desirable if multiple independent NCCL jobs share a single node (and if those jobs belong to different users, the OS will not allow the socket to be shared). In such cases, each job should be started with a different value (e.g., `localhost:12345`, `localhost:12346`, etc.). Since `localhost` is normally used, only those with access to the nodes where the job is running can connect to the socket. If desired, the address of an externally accessible network interface can be specified instead, which will make RAS accessible from other nodes (such as a cluster’s head node), but that has security implications that should be considered.
 
-#### Values accepted[](#id104 "Permalink to this heading")
+#### Values accepted[](#id117 "Permalink to this heading")
 
 Default is `localhost:28028`. Either a host name or an IP address can be used for the first part; an IPv6 address needs to be enclosed in square brackets (e.g., `[::1]`).
 
@@ -1357,7 +1480,7 @@ Default is `localhost:28028`. Either a host name or an IP address can be used fo
 
 Specify the multiplier factor to apply to all the timeouts of the RAS subsystem. RAS relies on multiple timeouts, ranging from 5 to 60 seconds, to determine the state of the application and to maintain its internal communication, with complex interdependencies between different timeouts. This variable can be used to scale up all these timeouts in a safe, consistent manner, should any of the defaults turn out to be too small; e.g., if the NCCL application is subject to high-overhead debugging/tracing/etc., which makes its execution less predictable. If one wants to use the `ncclras` client in such circumstances, its timeout may need to be increased as well (or disabled).
 
-#### Values accepted[](#id105 "Permalink to this heading")
+#### Values accepted[](#id118 "Permalink to this heading")
 
 Default is 1; define and set to larger values to increase the timeouts.
 
@@ -1367,7 +1490,7 @@ Default is 1; define and set to larger values to increase the timeouts.
 
 Implicitly order NCCL operations from different communicators on the same device using the host program order. This ensures the operations will not deadlock. When the CUDA runtime and driver are 12.3+, overlapped execution is permitted. On older CUDA versions the operations will be serialized.
 
-#### Values accepted[](#id107 "Permalink to this heading")
+#### Values accepted[](#id120 "Permalink to this heading")
 
 Default is 0 (disabled); set to 1 to enable.
 
@@ -1377,7 +1500,7 @@ Default is 0 (disabled); set to 1 to enable.
 
 Attempt to catch host threads racing to launch to the same device and if so return a fatal error. Such a race would violate the determinacy of the program order relied upon by NCCL_LAUNCH_ORDER_IMPLICIT.
 
-#### Values accepted[](#id108 "Permalink to this heading")
+#### Values accepted[](#id121 "Permalink to this heading")
 
 Default is 1 (enabled); set to 0 to disable.
 
@@ -1387,7 +1510,7 @@ Default is 1 (enabled); set to 0 to disable.
 
 Use the Linux Abstract Socket mechanism when creating Unix Domain Sockets (UDS) for intra-node CUDA IPC handle exchange. This is enabled by default, but having it enabled can prevent intra-node GPU communication when using multiple containers in certain situations (e.g. different network namespaces).
 
-#### Values accepted[](#id109 "Permalink to this heading")
+#### Values accepted[](#id122 "Permalink to this heading")
 
 Default is 1 (enabled); set to 0 to disable.
 
@@ -1395,8 +1518,8 @@ Default is 1 (enabled); set to 0 to disable.
 
 (since 2.29U1)
 
-Enable use of symmetric kernels that use GIN for network communication. These kernels do not yet honor ncclCommAbort() so they are currently disabled by default.
+Enable use of symmetric kernels that use GIN for network communication.
 
-#### Values accepted[](#id110 "Permalink to this heading")
+#### Values accepted[](#id123 "Permalink to this heading")
 
-Default is 0 (disabled); set to 1 to enable
+Default is 1 (enabled); set to 0 to disable
