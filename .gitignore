@@ -12,3 +12,6 @@ TODO.md
 
 # NCU report
 *.ncu-rep
+
+# Python cache
+__pycache__/
