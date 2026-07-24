@@ -192,7 +192,8 @@ extern "C" void solve(const float* A, const float* B, float* C, int M, int N, in
 
 - Function name is always `solve`, with `extern "C"` linkage.
 - Pointer parameters: `const` prefix means input; no `const` means output.
-- Supported types: `float*`, `double*`, `int*`, `unsigned char*`, `unsigned short*`, `unsigned long long*` (for clock64 profiling), plus scalar int types.
+- Supported types: `float*`, `double*`, `half*` / `__half*` (FP16), `__nv_bfloat16*` (BF16), `int*`, `unsigned char*`, `unsigned short*`, `unsigned long long*` (for clock64 profiling), plus scalar int types.
+- FP16/BF16 kernels get auto-adjusted validation tolerances (atol=1e-2, rtol=1e-2) unless the reference file explicitly overrides them.
 - `benchmark.py` auto-parses this signature to infer dimension parameter names and allocate tensors.
 
 ### Scraper Design (nvidia_doc_sync/scrape_cuda_docs.py)

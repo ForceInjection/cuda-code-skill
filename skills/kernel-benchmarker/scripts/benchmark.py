@@ -52,6 +52,9 @@ import torch
 SUPPORTED_TYPES = {
     "float*":          ("float*",          ctypes.c_void_p),
     "double*":         ("double*",         ctypes.c_void_p),
+    "half*":           ("half*",           ctypes.c_void_p),
+    "__half*":         ("__half*",         ctypes.c_void_p),
+    "__nv_bfloat16*":  ("__nv_bfloat16*",  ctypes.c_void_p),
     "unsigned char*":  ("unsigned char*",  ctypes.c_void_p),
     "unsigned short*": ("unsigned short*", ctypes.c_void_p),
     "unsigned int*":   ("unsigned int*",   ctypes.c_void_p),
@@ -73,6 +76,9 @@ SUPPORTED_TYPES = {
 DTYPE_MAP = {
     "float*":          torch.float32,
     "double*":         torch.float64,
+    "half*":           torch.float16,
+    "__half*":         torch.float16,
+    "__nv_bfloat16*":  torch.bfloat16,
     "int*":            torch.int32,
     "long*":           torch.int64,
     "short*":          torch.int16,
@@ -803,6 +809,22 @@ def run(cu_file, ref_file, dim_values, warmup, repeat,
         extra_nvcc_flags=extra_nvcc_flags,
         profile_phases=profile_phases,
     )
+
+    # Auto-adjust tolerances for half-precision types (FP16/BF16 have ~3
+    # decimal digits of mantissa; the defaults of atol=1e-4, rtol=1e-3 are
+    # too tight for meaningful half-precision validation).
+    if has_ref:
+        _HALF_TYPES = {"half*", "__half*", "__nv_bfloat16*"}
+        if any(ptype in _HALF_TYPES for ptype, _, _ in params):
+            ref_set_atol = hasattr(ref_mod, "atol")
+            ref_set_rtol = hasattr(ref_mod, "rtol")
+            if not ref_set_atol:
+                _atol = max(_atol, 1e-2)
+            if not ref_set_rtol:
+                _rtol = max(_rtol, 1e-2)
+            if not ref_set_atol or not ref_set_rtol:
+                print(f"[tolerance] half-precision detected — auto-adjusted "
+                      f"to atol={_atol}, rtol={_rtol}\n")
 
     # Only tensor output params count for validation; raw pointers are
     # profiling buffers, not validation targets.
