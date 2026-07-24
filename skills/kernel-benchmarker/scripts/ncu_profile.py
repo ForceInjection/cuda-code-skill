@@ -96,6 +96,28 @@ def parse_solve_signature(cu_file: str):
     return params
 
 
+def _ensure_global(cu_file: str) -> str:
+    """If solve lacks __global__, return path to a temp copy with __global__ added."""
+    with open(cu_file, "r") as f:
+        src = f.read()
+
+    if re.search(r'extern\s+"C"\s+__global__\s+void\s+solve', src):
+        return cu_file
+
+    new_src = re.sub(
+        r'(extern\s+"C"\s+)void\s+solve',
+        r'\1__global__ void solve',
+        src
+    )
+    if new_src == src:
+        return cu_file
+
+    tmp = cu_file + ".global.cu"
+    with open(tmp, "w") as f:
+        f.write(new_src)
+    return tmp
+
+
 def detect_arch() -> str:
     try:
         import torch
@@ -289,10 +311,13 @@ def main():
             except ValueError:
                 pass
 
-    cu_abs = os.path.abspath(args.cu_file)
+    # Preprocess: add __global__ if missing (some kernels omit it)
+    cu_file = _ensure_global(args.cu_file)
+    cu_abs = os.path.abspath(cu_file)
     arch = args.arch or detect_arch()
 
-    # Parse kernel signature
+    # Parse kernel signature (from original file since _ensure_global
+    # only adds __global__, doesn't change the parameter list)
     try:
         params = parse_solve_signature(args.cu_file)
     except ValueError as e:
@@ -323,6 +348,9 @@ def main():
     print(f"[compile] {' '.join(cmd)}", flush=True)
     result = subprocess.run(cmd, capture_output=True, text=True)
     os.remove(wrapper_path)
+    # Clean up temp file from _ensure_global if one was created
+    if cu_file != args.cu_file and os.path.exists(cu_file):
+        os.remove(cu_file)
 
     if result.returncode != 0:
         print(f"Compilation failed:\n{result.stderr}", file=sys.stderr)
