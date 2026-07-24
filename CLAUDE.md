@@ -39,11 +39,37 @@ python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> \
 
 # Benchmark only (no validation)
 python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000 --repeat=20
+
+# Override GPU arch detection (e.g., for cross-compilation)
+python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000 --arch=sm_89
+
+# Force recompilation (bypass PTX cache)
+python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000 --force-recompile
+
+# Enable GPU hardware state monitoring (runs nvidia-smi in parallel, warns on throttling)
+python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000 --monitor
+
+# Enable kernel-internal phase timing (compiles with -DKERNEL_PROFILE, prints per-phase clock64)
+python3 skills/kernel-benchmarker/scripts/benchmark.py <solution.cu> --N=1000000 --profile-phases
 ```
 
 Reference files must define `def reference(*, <tensors>, <dims>, **kwargs):` with optional module-level `atol`/`rtol`.
 
 `benchmark.py` compiles kernels via `nvcc -ptx` and loads/launches them via CUDA Driver API (`cuLaunchKernel`). PTX files are **auto-cached** (`*.ptx` alongside the `.cu` source) — subsequent runs skip compilation. Delete the `.ptx` file to force recompilation.
+
+### Kernel Internal Phase Timing (conditional profiling)
+
+Kernels can use `%%clock64` PTX instructions with `#ifdef KERNEL_PROFILE` guards so the same `.cu` file works as both a zero-overhead production build and a per-phase timing diagnostic build:
+
+```bash
+# Production build — zero profiling overhead
+nvcc -O3 -arch=sm_89 -o kernel solution.cu
+
+# Diagnostic build — prints per-phase clock64 cycle counts (load/compute/store)
+nvcc -O3 -arch=sm_89 -DKERNEL_PROFILE -o kernel_profile solution.cu
+```
+
+Or use `benchmark.py --profile-phases` to auto-compile with `-DKERNEL_PROFILE` and print per-block phase timing alongside the normal benchmark summary.
 
 The separate `ncu_profile.py` script generates a self-contained C host program that compiles together with the kernel into a standalone executable — purpose-built for NCU profiling without subprocess interference.
 
@@ -165,7 +191,7 @@ extern "C" void solve(const float* A, const float* B, float* C, int M, int N, in
 
 - Function name is always `solve`, with `extern "C"` linkage.
 - Pointer parameters: `const` prefix means input; no `const` means output.
-- Supported types: `float*`, `double*`, `int*`, `unsigned char*`, `unsigned short*`, plus scalar int types.
+- Supported types: `float*`, `double*`, `int*`, `unsigned char*`, `unsigned short*`, `unsigned long long*` (for clock64 profiling), plus scalar int types.
 - `benchmark.py` auto-parses this signature to infer dimension parameter names and allocate tensors.
 
 ### Scraper Design (nvidia_doc_sync/scrape_cuda_docs.py)
@@ -211,4 +237,4 @@ scripts/                         # Validation scripts (check_skills, check_count
 - **New kernel versions get timestamped filenames** — `solution_opt_20260316_153045.cu`, never overwrite the original.
 - **Knowledge-grounding is mandatory** — code-generator and ncu-rep-analyzer must consult both `cuda-knowledge/references/` (API signatures) and `cuda-samples/SKILL.md` (working code patterns) before generating code or recommendations involving complex APIs (cuBLASLt, Tensor Core, FP8 types).
 - **PTX-cached benchmarks** — `benchmark.py` caches compiled PTX files (`*.ptx`) beside the `.cu` source. Delete the `.ptx` to force recompilation when the kernel changes.
-- **Permissions** — `.claude/settings.json` pre-approves `python3`, `uv run`, `git submodule`, and `git` commands. If adding new automation scripts, register them there to avoid permission prompts.
+- **Permissions** — `.claude/settings.local.json` pre-approves `python3`, `uv run`, `git submodule`, `sshpass`, `rsync`, and `git` commands. If adding new automation scripts, register them there to avoid permission prompts.
