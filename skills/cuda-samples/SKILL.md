@@ -5,11 +5,11 @@ description: "Curated index of NVIDIA official CUDA Samples with code patterns, 
 
 # CUDA Samples Skill
 
-Curated index of ~50 official [NVIDIA CUDA Samples](https://github.com/NVIDIA/cuda-samples) organized by common CUDA programming tasks. Each entry links to the canonical source, describes the demonstrated pattern, lists architecture requirements, and provides a key code snippet.
+Curated index of ~65 official [NVIDIA CUDA Samples](https://github.com/NVIDIA/cuda-samples) organized by common CUDA programming tasks. Each entry links to the canonical source, describes the demonstrated pattern, lists architecture requirements, and provides a key code snippet.
 
 **Usage**: Search this file by pattern name (e.g., "reduction", "GEMM", "graph capture") or API name (e.g., "cublasSgemm", "cudaMallocAsync"). When a match is found, follow the GitHub permalink for the full implementation.
 
-**Source**: NVIDIA/cuda-samples (CUDA Toolkit 13.3), 175 `.cu` files, ~57K lines of CUDA C++.
+**Source**: NVIDIA/cuda-samples (CUDA Toolkit 13.3), 375 C++ files (189 `.cu` + 186 `.cpp`), ~139K lines; 35 Python samples.
 
 ---
 
@@ -60,6 +60,20 @@ Curated index of ~50 official [NVIDIA CUDA Samples](https://github.com/NVIDIA/cu
 | NVTX profiling markers               | Profiling       | —                             | `kernelNsysProfile`              |
 | Green context (SM partitioning)      | Advanced        | —                             | `greenContext`                   |
 | Image processing (NPP)               | Libraries       | `histEqualizationNPP`         | —                                |
+| CUB device find (libcu++)            | Libraries       | `cubDeviceFind`               | —                                |
+| CUB device segmented scan (libcu++)  | Libraries       | `cubDeviceSegmentedScan`      | —                                |
+| CUB device transform (libcu++)       | Libraries       | `cubDeviceTransform`          | —                                |
+| libcu++ mdspan                       | Libraries       | `libcuxxMdspan`               | —                                |
+| libcu++ random                       | Libraries       | `libcuxxRandom`               | —                                |
+| First CUDA Tile program              | CUDA Tile       | `helloTile`                   | —                                |
+| Tile vector add                      | CUDA Tile       | `tileVectorAdd`               | —                                |
+| Tile matrix transpose                | CUDA Tile       | `tileTranspose`               | —                                |
+| Tile GEMM (FP16→FP32, naive+opt)     | CUDA Tile       | `tileMatmul`                  | —                                |
+| Tile GEMM with autotuner             | CUDA Tile       | `tileMatmulAutotuner`         | —                                |
+| Tile batched GEMM (persistent grid)  | CUDA Tile       | `tileBmm`                     | —                                |
+| Tile LayerNorm (persistent grid)     | CUDA Tile       | `tileLayerNorm`               | —                                |
+| Tile RoPE (position encoding)        | CUDA Tile       | `tileRope`                    | —                                |
+| Tile SpMV (sparse mat-vec)           | CUDA Tile       | `tileSpMV`                    | —                                |
 
 The table above is a fast lookup index. Detailed code snippets and patterns for the most important samples are in the [references/](references/) directory, organized by topic (some entries are index-only without detailed snippets):
 
@@ -75,6 +89,7 @@ The table above is a fast lookup index. Detailed code snippets and patterns for 
 | Framework Interop        | [samples-framework-interop.md](references/samples-framework-interop.md)     | customPyTorchKernel, customTensorFlowKernel                                                                          |
 | Multi-GPU & Distributed  | [samples-multi-gpu.md](references/samples-multi-gpu.md)                     | simpleP2P (Python), ipcMemoryPool, multiGPUGradientAverage                                                           |
 | Advanced Topics          | [samples-advanced-topics.md](references/samples-advanced-topics.md)         | blockwiseSum, prefixSum, jitLtoLinking, greenContext                                                                 |
+| CUDA Tile                | [samples-cuda-tile.md](references/samples-cuda-tile.md)                     | helloTile, tileVectorAdd, tileTranspose, tileMatmul, tileMatmulAutotuner, tileBmm, tileLayerNorm, tileRope, tileSpMV |
 
 ---
 
@@ -107,6 +122,7 @@ Map optimization strategies to relevant samples:
 | `__reduce_add_sync`              | 8.0    | `reduction` (variant 7)                                                 |
 | TMA (Tensor Memory Accelerator)  | 9.0    | `tmaTensorMap` (Python)                                                 |
 | Green context (SM partitioning)  | 9.0    | `greenContext` (Python)                                                 |
+| CUDA Tile (`__tile_global__`, cuda::tiles) | 10.0   | `helloTile`, `tileMatmul`, `tileBmm`, `tileLayerNorm`, `tileRope`, `tileSpMV` |
 
 ---
 
