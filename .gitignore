@@ -15,3 +15,10 @@ TODO.md
 
 # Python cache
 __pycache__/
+
+# Generated profiling artifacts
+*_bench
+*_bench_wrapper.cu
+*.global.cu
+*.nvcc_clean.cu
+*.ptx
