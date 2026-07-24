@@ -89,7 +89,7 @@ Call the **kernel-benchmarker skill** to execute the following on the current ke
 
 | Result            | Action                                                                              |
 | ----------------- | ----------------------------------------------------------------------------------- |
-| Validation Failed | Call **cuda-code-generator** to fix the bug → After fixing, **restart from Step 1** |
+| Validation Failed | Call **cuda-debugger** to diagnose the crash/error → Call **cuda-code-generator** with diagnostic findings to fix the bug → After fixing, **restart from Step 1** |
 | Validation Passed | **Immediately enter Step 2**                                                        |
 
 ---
@@ -199,5 +199,6 @@ This skill orchestrates the following three sub-skills. **After calling a sub-sk
 | `cuda-code-generator` | Generate / Fix / Optimize kernel code                     | Record new file path, proceed to next step                     |
 | `kernel-benchmarker`  | Correctness validation + Performance benchmarking         | Record benchmark data, enter Step 2                            |
 | `ncu-rep-analyzer`    | NCU Profiling + Interpret report + Output opt suggestions | Extract optimization suggestions, **immediately enter Step 4** |
+| `cuda-debugger`       | Diagnose crashes, race conditions, memory errors          | Extract error file:line, pass findings to cuda-code-generator  |
 
 > **Common Interruption Trap**: `ncu-rep-analyzer` outputs a formatted analysis report. This report is an input intended for Step 4 (cuda-code-generator), **it is NOT the end of the optimization loop**. Upon receiving the analysis report, you MUST immediately execute Step 4 to implement optimizations, without waiting for user instructions.

@@ -173,6 +173,7 @@ cuda-knowledge (API reference docs)  +  cuda-samples (code pattern index)
          ↓                                    ↓
 cuda-optimizer (orchestrator)
     ├── kernel-benchmarker   → compile, validate, benchmark
+    ├── cuda-debugger        → crash diagnosis (compute-sanitizer, cuda-gdb, cuobjdump)
     ├── ncu-rep-analyzer     → NCU profile, diagnose bottleneck, suggest fixes
     └── cuda-code-generator  → generate/rewrite .cu files with optimizations
 ```
@@ -222,6 +223,7 @@ skills/
     references/
       cuda-optimization-strategies.md  # Bottleneck → strategy mapping (Block Tiling, Vectorized Load, etc.)
   ncu-rep-analyzer/SKILL.md      # NCU profiling + bottleneck classification + optimization suggestions
+  cuda-debugger/SKILL.md         # Crash diagnosis: compute-sanitizer, cuda-gdb, cuobjdump
   kernel-benchmarker/SKILL.md    # Compile, validate, benchmark via benchmark.py
 examples/
   vectorAdd/                     # Compilable kernel + reference (use as template)

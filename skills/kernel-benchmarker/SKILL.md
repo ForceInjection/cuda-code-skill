@@ -40,7 +40,8 @@ python3 skills/kernel-benchmarker/scripts/benchmark.py kernel/MatrixTranspose/so
 ```
 
 - If validation **fails** (non-zero exit code or output contains `FAIL`), stop subsequent steps.
-  - **MANDATORY REQUIREMENT**: If the failure reason is a VRAM error like Segfault or Illegal Memory Access, you MUST consult the `../cuda-knowledge/references/debugging-tools.md` workflow, and consider executing `compute-sanitizer --tool memcheck` or `cuda-gdb` to obtain the exact error line number before providing feedback and suggestions to the user.
+  - **MANDATORY REQUIREMENT**: If the failure reason is a VRAM error like Segfault or Illegal Memory Access, you MUST invoke the **cuda-debugger** skill to diagnose the root cause (compute-sanitizer memcheck, cuda-gdb backtrace). Reference: `../cuda-knowledge/references/debugging-tools.md`. Do NOT attempt to fix the kernel without diagnostic output from the debugger.
+  - If the failure is a correctness mismatch (wrong numerical results), invoke **cuda-debugger** with initcheck and racecheck to rule out uninitialized memory or race conditions before attempting to fix the logic.
 - If validation **passes** (`ALL PASS ✓`), proceed to Step 2.
 
 ---
